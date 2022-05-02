@@ -3,7 +3,7 @@ import json
 import functools
 import data_normalizers as DN
 import data_filters as DF
-from typing import Callable, List, Iterable, Dict, Any
+from typing import Callable, List, Iterable, Dict, Any, Optional
 from tqdm import tqdm
 import multiprocessing as mp
 from functools import partial
@@ -18,11 +18,18 @@ def read_jsonl(fn: str) -> Iterable[Dict[Any, Any]]:
                 pass
 
 
-def compose(*functions):
+# The compose function can compose multiple functions but is not used in favour
+# of for-loops
+def compose(*functions: List[Callable]) -> Callable:
     return functools.reduce(lambda f, g: lambda x: f(g(x)), functions, lambda x: x)
 
 
 def my_normalize(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[Any, Any]:
+    """
+    Given a list of functions and a json-object, this function iterates through
+    the object's content and applies all normalizer functions to update the 
+    content.
+    """
     meta = jobj["meta"]
     content = jobj["content"][:]
     for i, c in enumerate(content):
@@ -33,6 +40,10 @@ def my_normalize(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[An
 
 
 def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
+    """
+    This function collects normalizers and applies them to all json-objects in
+    the given file.
+    """
     normalizers: List[Callable] = []
     if args.unicode_normalize:
         normalizers.append(DN.unicode_normalize)
@@ -70,6 +81,12 @@ def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
 
 
 def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[Any, Any]:
+    """
+    Given a list of functions and a json-object, this function iterates through
+    the object's content and applies all filter functions to filter out unwanted
+    content.
+    The stricter filters should be applied first, to skip further function calls.
+    """
     meta = jobj["meta"]
     content = jobj["content"][:]
     new_content = []
@@ -88,6 +105,10 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[Any, 
 
 
 def apply_filters(fn: str, args: argparse.Namespace) -> None:
+    """
+    This function collects filters and applies them to all json-objects in
+    the given file.
+    """
     with mp.Manager() as manager:
         filters: List[Callable] = []
         if args.filter_by_num_tokens:
@@ -122,15 +143,21 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
                 print(json.dumps({"meta": meta, "content": content}), file=fout)
 
 
-def multi_pool(my_function, data, n_processes, chunk_size, functions):
+def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
+               n_processes: int, chunk_size: Optional[int],
+               functions: List[Callable]) -> List[Any]:
+    """
+    multi_pool is used to apply the normalizers and filters on one file with 
+    multiple processes.
+    """
     if chunk_size is None:
         chunk_size = min((len(data) // n_processes, 1))
 
     my_f = partial(my_function, sub_functions=functions)
     with mp.Pool(processes=n_processes) as pool:
-        return_dict = pool.map(my_f, tqdm(data, total=len(data)), chunksize=chunk_size)
+        return_list = pool.map(my_f, tqdm(data, total=len(data)), chunksize=chunk_size)
         # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
-    return return_dict
+    return return_list
 
 
 def json2txt(fn: str) -> None:
@@ -154,7 +181,7 @@ def json2txt(fn: str) -> None:
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--folder", type=str, default=None)
+    # parser.add_argument("--folder", type=str, default=None)
     parser.add_argument("--file", type=str, default=None)
 
     parser.add_argument("--filter_by_num_tokens", action="store_true")
@@ -196,24 +223,6 @@ def main():
             apply_normalizers(args.file, args)
         elif args.json2txt:
             json2txt(args.file)
-
-    # if args.file:
-    #     apply_filters(args.file, args)
-    #     apply_normalizers(args.file + ".filtered", args)
-    #     if args.json2txt:
-    #         json2txt(args.file + ".filtered.normalized")
-
-    # elif args.folder:
-    #     files = [os.path.join(args.folder, fn) for fn in os.listdir(args.folder)]
-    #     for fn in files:
-    #         print(f"Processing {fn}")
-    #         try:
-    #             apply_filters(fn, args)
-    #             apply_normalizers(fn, args)
-    #             if args.json2txt:
-    #                 json2txt(fn + ".normalized")
-    #         except Exception as e:
-    #             print(f"Processing {fn} failed with Exception {e}")
 
 
 if __name__ == "__main__":

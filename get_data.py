@@ -1,7 +1,7 @@
 import os
 import multiprocessing as mp
 import json
-import yaml
+import yaml  # type: ignore
 import argparse
 import itertools as it
 import kblab

@@ -1,3 +1,4 @@
+from re import I
 from transformers import PreTrainedTokenizerFast
 import kenlm
 import multiprocessing as mp
@@ -6,7 +7,7 @@ from find_duplicates import get_keys_and_docs, read_jsonl
 from tqdm import tqdm
 import json
 import operator
-from typing import Iterable, Dict, Any, TypeVar, TypedDict, List
+from typing import Dict, Any, TypeVar, TypedDict, List, Tuple
 from sentence_splitter import SentenceSplitter
 import argparse
 import time
@@ -27,7 +28,8 @@ def pp(log_score: float, length: int) -> float:
 #     return -1
 
 
-def load_tokenizer(path, unk, mask, pad, bos, eos):
+def load_tokenizer(path: str, unk: str, mask: str, pad: str, bos: str, eos: str
+                   ) -> PreTrainedTokenizerFast:
     tokenizer = PreTrainedTokenizerFast(tokenizer_file=path)
     tokenizer.bos_token = bos
     tokenizer.eos_token = eos
@@ -39,7 +41,8 @@ def load_tokenizer(path, unk, mask, pad, bos, eos):
     return tokenizer
 
 
-def tok_and_ken(key_text, tokenizer, lm):
+def tok_and_ken(key_text: Tuple[str, str], tokenizer: PreTrainedTokenizerFast,
+                lm: kenlm.Model) -> Tuple[str, float]:
     key, text = key_text
     tok_list = tokenizer.tokenize(text)
     tok = " ".join(tok_list)
@@ -47,7 +50,9 @@ def tok_and_ken(key_text, tokenizer, lm):
     return key, score
 
 
-def tok_split_and_ken(key_text, tokenizer, lm, splitter):
+def tok_split_and_ken(key_text: Tuple[str, str],
+                      tokenizer: PreTrainedTokenizerFast, lm: kenlm.Model,
+                      splitter: SentenceSplitter) -> Tuple[str, float]:
     key, text = key_text
     sentences = splitter.split(text=text)
     tok_sens = [" ".join(tokenizer.tokenize(sen)) for sen in sentences]
@@ -63,7 +68,7 @@ def score_doc(doc: List[str], model: kenlm.Model) -> float:
     return -1
 
 
-def filter_by_score(doc: Dict[str, Any], scores: Dict[str, List[float]]) -> Iterable[Dict[str, Any]]:
+def filter_by_score(doc: Dict[str, Any], scores: Dict[str, List[float]]) -> Dict[str, Any]:
     new_content = []
     new_scores = []
     cutoff_head = 430
