@@ -4,10 +4,9 @@ import json
 import functools
 import data_normalizers as DN
 import data_filters as DF
-from typing import Callable, List, Iterable, Dict, Any, Set
+from typing import Callable, List, Iterable, Dict, Any
 from tqdm import tqdm
 import multiprocessing as mp
-import itertools
 from functools import partial
 
 

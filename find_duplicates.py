@@ -15,15 +15,12 @@
 
 import argparse
 from functools import partial
-import itertools
 import json
 from lsh import cache, minhash
 import multiprocessing
 import numpy as np
 import time
 import pickle
-import sys
-import os
 from tqdm import tqdm
 import random
 from typing import Iterable, Dict, Any, Tuple

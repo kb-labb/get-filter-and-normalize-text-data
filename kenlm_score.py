@@ -6,7 +6,7 @@ from find_duplicates import get_keys_and_docs, read_jsonl
 from tqdm import tqdm
 import json
 import operator
-from typing import Iterable, Dict, Any, Tuple, TypeVar, TypedDict, List, Optional
+from typing import Iterable, Dict, Any, TypeVar, TypedDict, List
 from sentence_splitter import SentenceSplitter
 import argparse
 import time
