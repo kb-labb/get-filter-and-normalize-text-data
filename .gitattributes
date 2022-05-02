@@ -1,0 +1,2 @@
+*.arpa filter=lfs diff=lfs merge=lfs -text
+*.arpa.bin filter=lfs diff=lfs merge=lfs -text
