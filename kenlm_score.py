@@ -118,7 +118,7 @@ def main2():
 
     total = 0
     for element in read_jsonl(input_file):
-        key = element["meta"]["package_id"]
+        # key = element["meta"]["package_id"]
         docs = element["content"]
         total += len(docs)
     print(f"File {input_file} has {total:,} documents")
@@ -133,7 +133,7 @@ def main2():
         for element in tqdm(results):
             print(json.dumps(element), file=fout)
             # print(element["meta"]["package_id"])
-            
+
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()

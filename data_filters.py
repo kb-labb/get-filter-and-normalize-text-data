@@ -1,7 +1,7 @@
 import fasttext
 import re
 from filter_by_unicode import NICE_CHARS
-from typing import Pattern, List, Set, Dict
+from typing import Pattern, Dict
 
 
 MODEL = fasttext.load_model("lid.176.bin")

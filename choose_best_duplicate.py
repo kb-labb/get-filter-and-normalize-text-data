@@ -1,7 +1,6 @@
 import json
 import re
-from typing import Dict, List, Iterable, Any, Tuple
-from sklearn.metrics import SCORERS
+from typing import Dict, Iterable, Any
 from tqdm import tqdm
 import difflib
 import multiprocessing
@@ -54,7 +53,7 @@ def read_jsonl_with_doubles(fn: str) -> Iterable[Any]:
             except json.JSONDecodeError:
                 line = re.sub(two_dicts, "}\n{", line)
                 l1, l2 = line.split("\n")
-                yield json.loads(l1) 
+                yield json.loads(l1)
                 yield json.loads(l2)
 
 
@@ -111,7 +110,7 @@ def get_dduped_text(fn: str, fn_out: str, dc: Dict[int, Dict[int, float]]) -> No
 def get_dduped_text_json(fn: str, fn_out: str, dc: Dict[str, Dict[str, float]], scores: Dict[str, Dict[str, float]]) -> None:
     seen = set()
     keep = {}
-    
+
     def len_fun(x):
         return 10**math.log(len(x.split()))
 
@@ -122,7 +121,7 @@ def get_dduped_text_json(fn: str, fn_out: str, dc: Dict[str, Dict[str, float]], 
 
     key2doc = {k: d for k, d in get_keys_and_docs(fn)}
     total = len(key2doc)
-    
+
     for doc_key in tqdm(key2doc, total=total):
         if doc_key not in seen:
             doc = key2doc[doc_key]
@@ -141,7 +140,7 @@ def get_dduped_text_json(fn: str, fn_out: str, dc: Dict[str, Dict[str, float]], 
             k, i = split_key(doc_key)
             if k not in keep:
                 keep[k] = {}
-            keep[k][i] = doc 
+            keep[k][i] = doc
     with open(fn_out, "w") as fout:
         for element in read_jsonl(fn):
             new_element = element.copy()
@@ -160,7 +159,7 @@ def get_dduped_text_json(fn: str, fn_out: str, dc: Dict[str, Dict[str, float]], 
 #     with open(fn) as fh:
 #         fh.seek(0)
 #         content = fh.readlines()
-# 
+#
 #     print("creating managed objects")
 #     manager = multiprocessing.Manager()
 #     content = manager.list(content)
@@ -175,6 +174,8 @@ def get_dduped_text_json(fn: str, fn_out: str, dc: Dict[str, Dict[str, float]], 
 #                 print(" ".join(r), file=fout)
 #     fout.close()
 #     print(f"Done! Took {time.time() - start} seconds.")
+
+
 def get_duplicate_texts(fn: str, fn_out: str, dc: Dict[int, Dict[int, float]], scores: Dict[str, Any]) -> None:
     start = time.time()
     key2doc = {k: d for k, d in get_keys_and_docs(fn)}
@@ -198,7 +199,10 @@ def get_duplicate_texts(fn: str, fn_out: str, dc: Dict[int, Dict[int, float]], s
 def get_dupes(key_doc, key2doc, dc, scores):
     result = []
     key, doc = key_doc
-    len_fun = lambda x: 10**math.log(len(x.split()))
+
+    def len_fun(x):
+        return 10**math.log(len(x.split()))
+
     if key in dc:
         kk, ik = key.split("_")
         ik = int(ik)
@@ -237,11 +241,10 @@ def main():
 
     with open(args.scores) as fin:
         score_dict = json.load(fin)
-    
+
     get_dduped_text_json(args.input, args.output, edc, score_dict)
 
     print(f"Done :)\nThis took {time.time() - start:,.2f} seconds")
-
 
 
 if __name__ == "__main__":

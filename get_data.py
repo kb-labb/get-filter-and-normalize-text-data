@@ -100,7 +100,7 @@ def get_data(package_id: str, url: str, headers: Dict[str, str],
     if meta["title"] == "failed":
         return None
     # title = " ".join(meta["title"].split()[:-1])
-    title = "_".join(meta["title"].split()[:-1][:5])
+    # title = "_".join(meta["title"].split()[:-1][:5])
     year = str(meta["year"])
     # fn = os.path.join(fpath, title, f"{year}.jsonl")
     fn = os.path.join(fpath, f"{year}.jsonl")

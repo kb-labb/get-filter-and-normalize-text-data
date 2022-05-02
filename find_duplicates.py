@@ -26,7 +26,6 @@ import random
 from typing import Iterable, Dict, Any, Tuple
 
 
-
 def read_jsonl(fn: str) -> Iterable[Dict[Any, Any]]:
     with open(fn) as fh:
         for line in fh:
@@ -69,7 +68,7 @@ def jaccard(set_a, set_b, args):
 
 def compute_fingerprint(key_text):
     try:
-        key, text = key_text 
+        key, text = key_text
         fingerprint = hasher.fingerprint(text)
     except Exception as e:
         print('Error:', e)
@@ -86,7 +85,7 @@ def url_pairs_to_remove(bucket_urls, args, url_doc):
     #     return remove_urls_dict, deduped_local, counter_local
     while len(bucket_urls) > 1:
         if args.heuristic_iter != -1 and \
-            iteration == args.heuristic_iter:
+                iteration == args.heuristic_iter:
             break
 
         remove_urls = {}
@@ -127,7 +126,7 @@ def write_remove_urls_dict(remove_urls, f_out):
 
 
 def compute_jaccard(bin, url_doc, args):
-    i = multiprocessing.current_process()._identity[0]
+    # i = multiprocessing.current_process()._identity[0]
     remove_urls_list = []
     deduped_local, counter_local = 0, 0
     url_ptr = partial(url_pairs_to_remove, args=args, url_doc=url_doc)
@@ -145,7 +144,7 @@ def compute_jaccard(bin, url_doc, args):
 def find_pair_urls_parallel(args, lshcache, url_doc):
     start_time = time.time()
     with open(args.output, 'wb') as f_out:
-        deduped, counter = 0, 0
+        # deduped, counter = 0, 0
 
         num_bins = len(lshcache.bins)
         print(f"num_bins: {num_bins}")
@@ -153,8 +152,8 @@ def find_pair_urls_parallel(args, lshcache, url_doc):
         # url_doc = manager.dict(url_doc)
         # with multiprocessing.Pool(num_bins) as pool:
         # with multiprocessing.get_context("forkserver").Pool(num_bins) as pool:
-        with multiprocessing.get_context("spawn").Pool(num_bins) as pool:
         # if True:
+        with multiprocessing.get_context("spawn").Pool(num_bins) as pool:
             cj = partial(compute_jaccard, url_doc=url_doc, args=args)
             cji = pool.imap_unordered(cj, lshcache.bins)
             # cji = map(cj, lshcache.bins)
@@ -164,14 +163,13 @@ def find_pair_urls_parallel(args, lshcache, url_doc):
                 write_remove_urls_dict(remove_urls, f_out)
             pool.terminate()
 
-    print(' Taken time for jaccard similarities {:.2f} seconds'.format(\
+    print(' Taken time for jaccard similarities {:.2f} seconds'.format(
         time.time() - start_time), flush=True)
 
 
 def find_pair_urls_sequential(args, lshcache, url_doc):
     start_time = time.time()
     with open(args.output, 'wb') as f_out:
-        deduped, counter = 0, 0
 
         num_bins = len(lshcache.bins)
         print(f"num_bins: {num_bins}")
@@ -183,8 +181,7 @@ def find_pair_urls_sequential(args, lshcache, url_doc):
             # counter += counter_local
             write_remove_urls_dict(remove_urls, f_out)
 
-
-    print(' Taken time for jaccard similarities {:.2f} seconds'.format(\
+    print(' Taken time for jaccard similarities {:.2f} seconds'.format(
         time.time() - start_time), flush=True)
 
 
@@ -214,8 +211,7 @@ def compute_fingerprints(args):
     print("Computing fingerprints", flush=True)
     for i, input_file in enumerate(args.inputs):
         # key = input_file.split("/")[-1]
-        print(f'document processing {input_file}',
-            flush=True)
+        print(f'document processing {input_file}', flush=True)
 
         total = len(list(get_keys_and_docs(input_file)))
         print(f"File {input_file} has {total:,} documents")
@@ -260,32 +256,31 @@ def get_args():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=1234,
-                       help='Random seed used for python, numpy')
-    parser.add_argument('--inputs', nargs = '*', default=None, help = \
-                        'List of the input files, ')
-    parser.add_argument('--load-fingerprints', nargs = '*', default=None,
-                       help='Load fingerprints from a list of pickle files,'
+                        help='Random seed used for python, numpy')
+    parser.add_argument('--inputs', nargs='*', default=None,
+                        help='List of the input files, ')
+    parser.add_argument('--load-fingerprints', nargs='*', default=None,
+                        help='Load fingerprints from a list of pickle files,'
                         ' e.g. cc.pkl news.pkl')
     parser.add_argument('--save-fingerprints', type=str, default=None,
-                       help='Save the fingerprints of the inputs.')
+                        help='Save the fingerprints of the inputs.')
     parser.add_argument('--output', type=str, default=None,
-                       help='Output file name that consists of all ids'
+                        help='Output file name that consists of all ids'
                         ' with matching similarities')
     parser.add_argument('--jaccard', type=str, default='union',
-                        choices=['union', 'min', 'max'], help='Jaccard'\
-                        ' similarity computation')
+                        choices=['union', 'min', 'max'],
+                        help='Jaccard similarity computation')
     parser.add_argument('--heuristic-iter', type=int, default=1,
-                       help='Number of iterations to run the heuristics'
-                        ': use -1 for exact')
+                        help='Number of iterations to run the heuristics: use -1 for exact')
     parser.add_argument('--num-bands', type=int, default=10,
-                       help='Number of bands to use in cache')
+                        help='Number of bands to use in cache')
     parser.add_argument('--num-seeds', type=int, default=100,
-                       help='Number of seeds to use for minhash. Note that'
+                        help='Number of seeds to use for minhash. Note that'
                         ' this value should be divisible by num-bands')
     parser.add_argument('--num-workers', type=int, default=100,
-                       help="Number of workers")
+                        help="Number of workers")
     parser.add_argument('--jaccard-parallel', action='store_true',
-                       help='Use this to process large number of documents.')
+                        help='Use this to process large number of documents.')
     return parser.parse_args()
 
 

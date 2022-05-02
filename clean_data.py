@@ -1,4 +1,3 @@
-import os
 import argparse
 import json
 import functools
@@ -197,8 +196,6 @@ def main():
             apply_normalizers(args.file, args)
         elif args.json2txt:
             json2txt(args.file)
-
-
 
     # if args.file:
     #     apply_filters(args.file, args)

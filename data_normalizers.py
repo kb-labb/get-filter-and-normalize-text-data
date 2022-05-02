@@ -79,9 +79,9 @@ def _anonymize(doc: str) -> str:
 #     # this version checks that the doc starts with a capital letter
 #     beginning = re.compile(r"^([A-ZÖÄÅØÆ])")
 #     end = re.compile(r"([.!?\"\'])$")
-# 
+#
 #     doc = doc.split()
-# 
+#
 #     while len(doc) > 0 and beginning.search(doc[0]) is None:
 #         doc = doc[1:]
 #     while len(doc) > 0 and end.search(doc[-1]) is None:
