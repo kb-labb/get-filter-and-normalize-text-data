@@ -15,19 +15,15 @@
 
 import argparse
 from functools import partial
-import itertools
 import json
 from lsh import cache, minhash
 import multiprocessing
 import numpy as np
 import time
 import pickle
-import sys
-import os
 from tqdm import tqdm
 import random
-from typing import Iterable, Dict, Any, Tuple
-
+from typing import Iterable, Dict, Any, List, Optional, Tuple, Set, BinaryIO
 
 
 def read_jsonl(fn: str) -> Iterable[Dict[Any, Any]]:
@@ -39,7 +35,12 @@ def read_jsonl(fn: str) -> Iterable[Dict[Any, Any]]:
                 pass
 
 
-def get_keys_and_docs(fn: str) -> Tuple[str, str]:
+def get_keys_and_docs(fn: str) -> Iterable[Tuple[str, str]]:
+    """
+    The keys generated here combine the package-id and the position in the list
+    of its content.
+    This key will in the following be used as a url.
+    """
     for jobj in read_jsonl(fn):
         key = jobj["meta"]["package_id"]
         for i, doc in enumerate(jobj["content"]):
@@ -48,14 +49,14 @@ def get_keys_and_docs(fn: str) -> Tuple[str, str]:
 
 # This function is adapted from:
 #   https://github.com/mattilyra/LSH/blob/master/examples/Introduction.ipynb
-def shingles(text, char_ngram=5):
+def shingles(text: str, char_ngram: int = 5) -> Set[str]:
     return set(text[head:head + char_ngram]
                for head in range(0, len(text) - char_ngram))
 
 
 # This function is adapted from:
 #  https://github.com/mattilyra/LSH/blob/master/examples/Introduction.ipynb
-def jaccard(set_a, set_b, args):
+def jaccard(set_a: Set[str], set_b: Set[str], args: argparse.Namespace) -> float:
     if len(set_a) < 1 or len(set_b) < 1:
         return 0.0
 
@@ -70,9 +71,10 @@ def jaccard(set_a, set_b, args):
         return len(intersection) / len(union)
 
 
-def compute_fingerprint(key_text):
+def compute_fingerprint(key_text: Tuple[str, str]
+                        ) -> Tuple[Optional[str], Optional[str], Any, bool]:
     try:
-        key, text = key_text 
+        key, text = key_text
         fingerprint = hasher.fingerprint(text)
     except Exception as e:
         print('Error:', e)
@@ -81,7 +83,12 @@ def compute_fingerprint(key_text):
     return key, text, fingerprint, True
 
 
-def url_pairs_to_remove(bucket_urls, args, url_doc):
+def url_pairs_to_remove(bucket_urls: List[str], args: argparse.Namespace,
+                        url_doc: Dict[str, str]
+                        ) -> Tuple[Dict[str, Dict[str, float]], int, int]:
+    """
+    The main function filtering duplicate documents
+    """
     remove_urls_dict = {}
     deduped_local, counter_local = 0, 0
     iteration = 0
@@ -89,7 +96,7 @@ def url_pairs_to_remove(bucket_urls, args, url_doc):
     #     return remove_urls_dict, deduped_local, counter_local
     while len(bucket_urls) > 1:
         if args.heuristic_iter != -1 and \
-            iteration == args.heuristic_iter:
+                iteration == args.heuristic_iter:
             break
 
         remove_urls = {}
@@ -119,7 +126,8 @@ def url_pairs_to_remove(bucket_urls, args, url_doc):
     return remove_urls_dict, deduped_local, counter_local
 
 
-def write_remove_urls_dict(remove_urls, f_out):
+def write_remove_urls_dict(remove_urls: List[Dict[str, Dict[str, float]]],
+                           f_out: BinaryIO) -> None:
     if len(remove_urls) > 0:
         # f_out.write(json.dumps(remove_urls, ensure_ascii=False).encode("utf-8"))
         # f_out.write('\n'.encode('utf-8'))
@@ -129,8 +137,10 @@ def write_remove_urls_dict(remove_urls, f_out):
             f_out.write('\n'.encode('utf-8'))
 
 
-def compute_jaccard(bin, url_doc, args):
-    i = multiprocessing.current_process()._identity[0]
+def url_pairs_to_remove_bin(bin: Dict[str, str], url_doc: Dict[str, str],
+                    args: argparse.Namespace
+                    ) -> Tuple[List[Dict[str, Dict[str, float]]], int, int]:
+    # i = multiprocessing.current_process()._identity[0]
     remove_urls_list = []
     deduped_local, counter_local = 0, 0
     url_ptr = partial(url_pairs_to_remove, args=args, url_doc=url_doc)
@@ -145,53 +155,41 @@ def compute_jaccard(bin, url_doc, args):
     return remove_urls_list, deduped_local, counter_local
 
 
-def find_pair_urls_parallel(args, lshcache, url_doc):
+def find_pair_urls_parallel(args: argparse.Namespace, lshcache: cache.Cache,
+                              url_doc: Dict[str, str]) -> None:
     start_time = time.time()
     with open(args.output, 'wb') as f_out:
-        deduped, counter = 0, 0
-
         num_bins = len(lshcache.bins)
         print(f"num_bins: {num_bins}")
-        # manager = multiprocessing.Manager()
-        # url_doc = manager.dict(url_doc)
-        # with multiprocessing.Pool(num_bins) as pool:
-        # with multiprocessing.get_context("forkserver").Pool(num_bins) as pool:
         with multiprocessing.get_context("spawn").Pool(num_bins) as pool:
-        # if True:
-            cj = partial(compute_jaccard, url_doc=url_doc, args=args)
+            cj = partial(url_pairs_to_remove_bin, url_doc=url_doc, args=args)
             cji = pool.imap_unordered(cj, lshcache.bins)
-            # cji = map(cj, lshcache.bins)
             for remove_urls, deduped_local, counter_local in cji:
-                # deduped += deduped_local
-                # counter += counter_local
                 write_remove_urls_dict(remove_urls, f_out)
             pool.terminate()
 
-    print(' Taken time for jaccard similarities {:.2f} seconds'.format(\
+    print(' Taken time for jaccard similarities {:.2f} seconds'.format(
         time.time() - start_time), flush=True)
 
 
-def find_pair_urls_sequential(args, lshcache, url_doc):
+def find_pair_urls_sequential(args: argparse.Namespace, lshcache: cache.Cache,
+                              url_doc: Dict[str, str]) -> None:
     start_time = time.time()
     with open(args.output, 'wb') as f_out:
-        deduped, counter = 0, 0
 
         num_bins = len(lshcache.bins)
         print(f"num_bins: {num_bins}")
-        cj = partial(compute_jaccard, url_doc=url_doc, args=args)
+        cj = partial(url_pairs_to_remove_bin, url_doc=url_doc, args=args)
         cji = map(cj, lshcache.bins)
-        # cji = map(cj, lshcache.bins)
         for remove_urls, deduped_local, counter_local in cji:
-            # deduped += deduped_local
-            # counter += counter_local
             write_remove_urls_dict(remove_urls, f_out)
 
-
-    print(' Taken time for jaccard similarities {:.2f} seconds'.format(\
+    print(' Taken time for jaccard similarities {:.2f} seconds'.format(
         time.time() - start_time), flush=True)
 
 
-def load_fingerprints(args):
+def load_fingerprints(args: argparse.Namespace
+                      ) -> Tuple[cache.Cache, Dict[str, str]]:
     start = time.time()
     print("Loading...")
     for count_fp, fp_file_name in enumerate(args.load_fingerprints):
@@ -213,29 +211,18 @@ def load_fingerprints(args):
     return lshcache, url_doc
 
 
-def compute_fingerprints(args):
+def compute_fingerprints(args: argparse.Namespace
+                         ) -> Tuple[cache.Cache, Dict[str, str]]:
     print("Computing fingerprints", flush=True)
     for i, input_file in enumerate(args.inputs):
-        # key = input_file.split("/")[-1]
-        print(f'document processing {input_file}',
-            flush=True)
+        print(f'document processing {input_file}', flush=True)
 
         total = len(list(get_keys_and_docs(input_file)))
         print(f"File {input_file} has {total:,} documents")
 
         # compute fingerprints in parallel
-        # with multiprocessing.Pool(args.num_workers) as pool:
         with multiprocessing.get_context("fork").Pool(args.num_workers) as pool:
             url_doc = {}
-            # with open(input_file, "r", encoding="utf-8") as fin:
-            #     finsize = sum(1 for _ in fin)
-            #     fin.seek(0)
-            #     print(f"file has {finsize:,} lines")
-
-            # cf = partial(compute_fingerprint, key=key)
-            # compute_fingerprint_iter = pool.imap_unordered(cf, zip(fin, range(finsize)), chunksize=finsize // args.num_workers)
-            # compute_fingerprint_iter = pool.imap_unordered(cf, zip(fin, range(finsize)), chunksize=finsize // args.num_workers)
-            # compute_fingerprint_iter = pool.starmap(compute_fingerprint, get_keys_and_docs(input_file), chunksize=1)
             chunksize = max((1, total // args.num_workers))
             compute_fingerprint_iter = pool.imap_unordered(compute_fingerprint, get_keys_and_docs(input_file), chunksize=chunksize)
             start = time.time()
@@ -248,7 +235,8 @@ def compute_fingerprints(args):
     return lshcache, url_doc
 
 
-def save_fingerprints(args, lshcache, url_doc):
+def save_fingerprints(args: argparse.Namespace, lshcache: cache.Cache,
+                      url_doc: Dict[str, str]) -> None:
     start = time.time()
     print("Saving fingerprints to pickle file {}".format(
         args.save_fingerprints), flush=True)
@@ -258,37 +246,36 @@ def save_fingerprints(args, lshcache, url_doc):
     print(f"Saving took {time.time() - start:.2f} seconds")
 
 
-def get_args():
+def get_args() -> argparse.Namespace:
     print('parsing the arguments ...')
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=1234,
-                       help='Random seed used for python, numpy')
-    parser.add_argument('--inputs', nargs = '*', default=None, help = \
-                        'List of the input files, ')
-    parser.add_argument('--load-fingerprints', nargs = '*', default=None,
-                       help='Load fingerprints from a list of pickle files,'
+                        help='Random seed used for python, numpy')
+    parser.add_argument('--inputs', nargs='*', default=None,
+                        help='List of the input files, ')
+    parser.add_argument('--load-fingerprints', nargs='*', default=None,
+                        help='Load fingerprints from a list of pickle files,'
                         ' e.g. cc.pkl news.pkl')
     parser.add_argument('--save-fingerprints', type=str, default=None,
-                       help='Save the fingerprints of the inputs.')
+                        help='Save the fingerprints of the inputs.')
     parser.add_argument('--output', type=str, default=None,
-                       help='Output file name that consists of all ids'
+                        help='Output file name that consists of all ids'
                         ' with matching similarities')
     parser.add_argument('--jaccard', type=str, default='union',
-                        choices=['union', 'min', 'max'], help='Jaccard'\
-                        ' similarity computation')
+                        choices=['union', 'min', 'max'],
+                        help='Jaccard similarity computation')
     parser.add_argument('--heuristic-iter', type=int, default=1,
-                       help='Number of iterations to run the heuristics'
-                        ': use -1 for exact')
+                        help='Number of iterations to run the heuristics: use -1 for exact')
     parser.add_argument('--num-bands', type=int, default=10,
-                       help='Number of bands to use in cache')
+                        help='Number of bands to use in cache')
     parser.add_argument('--num-seeds', type=int, default=100,
-                       help='Number of seeds to use for minhash. Note that'
+                        help='Number of seeds to use for minhash. Note that'
                         ' this value should be divisible by num-bands')
     parser.add_argument('--num-workers', type=int, default=100,
-                       help="Number of workers")
+                        help="Number of workers")
     parser.add_argument('--jaccard-parallel', action='store_true',
-                       help='Use this to process large number of documents.')
+                        help='Use this to process large number of documents.')
     return parser.parse_args()
 
 

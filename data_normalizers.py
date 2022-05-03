@@ -59,6 +59,9 @@ def moses_normalize(doc: str) -> str:
 
 
 def common_errors(doc: str) -> str:
+    """
+    This fixes common OCR errors like the dreaded örn -> om
+    """
     return ERROR_REPLACER(doc)
 
 
@@ -72,21 +75,6 @@ def _anonymize(doc: str) -> str:
         _doc = re.sub(pattern, replacement, _doc)
     return _doc
 
-
-# def strip_incomplete_string(doc: str) -> str:
-#     # the first version of the regex checks that docs do not start with a lowercase letter
-#     # beginning = re.compile(r"^([A-ZÖÄÅØÆ]|\W|\d)")
-#     # this version checks that the doc starts with a capital letter
-#     beginning = re.compile(r"^([A-ZÖÄÅØÆ])")
-#     end = re.compile(r"([.!?\"\'])$")
-# 
-#     doc = doc.split()
-# 
-#     while len(doc) > 0 and beginning.search(doc[0]) is None:
-#         doc = doc[1:]
-#     while len(doc) > 0 and end.search(doc[-1]) is None:
-#         doc = doc[:-1]
-#     return " ".join(doc)
 
 def strip_incomplete_string(doc: str) -> str:
     beginning = re.compile(r"([A-ZÖÄÅØÆ]\w+)")
