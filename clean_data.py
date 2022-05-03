@@ -27,7 +27,7 @@ def compose(*functions: List[Callable]) -> Callable:
 def my_normalize(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[Any, Any]:
     """
     Given a list of functions and a json-object, this function iterates through
-    the object's content and applies all normalizer functions to update the 
+    the object's content and applies all normalizer functions to update the
     content.
     """
     meta = jobj["meta"]
@@ -147,7 +147,7 @@ def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
                n_processes: int, chunk_size: Optional[int],
                functions: List[Callable]) -> List[Any]:
     """
-    multi_pool is used to apply the normalizers and filters on one file with 
+    multi_pool is used to apply the normalizers and filters on one file with
     multiple processes.
     """
     if chunk_size is None:

@@ -1,4 +1,3 @@
-from re import I
 from transformers import PreTrainedTokenizerFast
 import kenlm
 import multiprocessing as mp

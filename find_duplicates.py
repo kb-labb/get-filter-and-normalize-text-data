@@ -138,8 +138,8 @@ def write_remove_urls_dict(remove_urls: List[Dict[str, Dict[str, float]]],
 
 
 def url_pairs_to_remove_bin(bin: Dict[str, str], url_doc: Dict[str, str],
-                    args: argparse.Namespace
-                    ) -> Tuple[List[Dict[str, Dict[str, float]]], int, int]:
+                            args: argparse.Namespace
+                            ) -> Tuple[List[Dict[str, Dict[str, float]]], int, int]:
     # i = multiprocessing.current_process()._identity[0]
     remove_urls_list = []
     deduped_local, counter_local = 0, 0
@@ -156,7 +156,7 @@ def url_pairs_to_remove_bin(bin: Dict[str, str], url_doc: Dict[str, str],
 
 
 def find_pair_urls_parallel(args: argparse.Namespace, lshcache: cache.Cache,
-                              url_doc: Dict[str, str]) -> None:
+                            url_doc: Dict[str, str]) -> None:
     start_time = time.time()
     with open(args.output, 'wb') as f_out:
         num_bins = len(lshcache.bins)
