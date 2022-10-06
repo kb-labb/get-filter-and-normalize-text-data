@@ -15,13 +15,16 @@ import os
 import json
 import multiprocessing as mp
 from typing import List, Dict, Any, Callable, Optional, Iterable
-from functools import partial
 from tqdm import tqdm
-from collections import Counter
 import time
+import argparse
 
 
-def read_jsonl(fn: str) -> Iterable[Dict[Any, Any]]:
+CNT = Dict[str, Dict[int, Any]]
+JOBJ = Dict[Any, Any]
+
+
+def read_jsonl(fn: str) -> Iterable[JOBJ]:
     with open(fn) as fh:
         for line in fh:
             try:
@@ -30,24 +33,7 @@ def read_jsonl(fn: str) -> Iterable[Dict[Any, Any]]:
                 pass
 
 
-def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
-               n_processes: int, chunk_size: Optional[int],
-               functions: List[Callable]) -> List[Any]:
-    """
-    multi_pool is used to apply the normalizers and filters on one file with
-    multiple processes.
-    """
-    if chunk_size is None:
-        chunk_size = min((len(data) // n_processes, 1))
-
-    my_f = partial(my_function, sub_functions=functions)
-    with mp.Pool(processes=n_processes) as pool:
-        return_list = pool.map(my_f, tqdm(data, total=len(data)), chunksize=chunk_size)
-        # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
-    return return_list
-
-
-def count(jobj, cnt):
+def count(jobj: Dict[str, Any], cnt: CNT) -> CNT:
     meta = jobj["meta"]
     year = meta["year"]
     title = meta["title"]
@@ -71,37 +57,30 @@ def count(jobj, cnt):
             cnt["#words"][year] += len_c
             cnt["doc lengths"][year].append(len_c)
             cnt["titles"][year].append(title)
-    #print(cnt)
     return cnt
 
 
-def count_updater(cnt, jobj_cnt):
+def count_updater(cnt: CNT, jobj_cnt: CNT) -> CNT:
     for key in jobj_cnt:
         for year in jobj_cnt[key]:
             if year not in cnt[key]:
-                # print(key, year, jobj_cnt[key][year])
                 cnt[key][year] = jobj_cnt[key][year]
                 print(key, year, cnt[key][year])
             else:
                 # either int then add or list and append
                 cnt[key][year] += jobj_cnt[key][year]
-                # if type(cnt[key][year]) == int:
-                #     cnt[key][year] += jobj_cnt[key][year]
-                # elif type(cnt[key][year]) == list:
-                #     cnt[key][year] += jobj_cnt[key][year]
     return cnt
 
 
-def count_wrapper(fn, cnts):
+def count_wrapper(fn: str, cnts: List[CNT]) -> List[CNT]:
     cnt = {}
     for jobj in read_jsonl(fn):
-        jobj_cnt = {
-                    "#docs": {},
-                    "#words": {},
-                    "doc lengths": {},
-                    "titles": {},
-                    }
-        # cnt.update(count(jobj, jobj_cnt))
+        jobj_cnt: CNT = {
+                        "#docs": {},
+                        "#words": {},
+                        "doc lengths": {},
+                        "titles": {},
+                        }
         jobj_cnt = count(jobj, jobj_cnt)
         for k in jobj_cnt:
             if k not in cnt:
@@ -112,39 +91,43 @@ def count_wrapper(fn, cnts):
                         cnt[k][y] = jobj_cnt[k][y]
                     else:
                         cnt[k][y] += jobj_cnt[k][y]
-        # cnt = count_updater(cnt, jobj_cnt)
-        # print(jobj_cnt["#docs"])
     cnts.append(cnt)
     return cnts
 
 
-def get_files_from_folders(root, suffix):
+def get_files_from_folders(root: str, suffix: str) -> Iterable[str]:
     return filter(lambda x: x.endswith(suffix),
                   [os.path.join(f[0], e) for f in os.walk(root) for e in f[2]]
                   )
 
 
-def main(folder_name, chunksize, n_processes):
-    if chunksize is None:
-        chunksize = min((len(get_files_from_folders(folder_name, ".jsonl")) // n_processes, 1))
+def print_counts(cnt: CNT) -> None:
+    for year in sorted(cnt["#docs"]):
+        avg_doc_len = sum(cnt["doc lengths"][year]) / len(cnt["doc lengths"][year])
+        nwords = cnt["#words"][year]
+        ndocs = cnt["#docs"][year]
+        print(f"{year:<10} {nwords:>20,} {ndocs:>20,} {avg_doc_len:>10.2f}")
+        # print(Counter(cnt["titles"][year]))
+    return
+
+
+def main(folder_name: str,
+         n_processes: int,
+         file_suffix: str,
+         outfile: str
+         ) -> None:
     manager = mp.Manager()
     cnts = manager.list()
-    # cnts["#docs"] = {}
-    # cnts["#words"] = {}
-    # cnts["doc lengths"] = {}
-    # cnts["titles"] = {}
-    cnt = {
-            "#docs": {},
-            "#words": {},
-            "doc lengths": {},
-            "titles": {},
-            }
-    # my_f = partial(count_wrapper, cnt=cnt)
-    # return_dict = pool.map(my_f, get_files_from_folders(folder_name, ".jsonl"), chunksize=chunksize)
-    # return_dict = map(my_f, get_files_from_folders(folder_name, ".jsonl"))
+    cnt: CNT = {
+                "#docs": {},
+                "#words": {},
+                "doc lengths": {},
+                "titles": {},
+                }
     jobs = []
     start = time.time()
-    for fn in get_files_from_folders(folder_name, ".jsonl"):
+    n_files = len(list(get_files_from_folders(folder_name, file_suffix)))
+    for fn in tqdm(get_files_from_folders(folder_name, file_suffix), total=n_files):
         p = mp.Process(target=count_wrapper, args=(fn, cnts))
         jobs.append(p)
         p.start()
@@ -154,68 +137,7 @@ def main(folder_name, chunksize, n_processes):
             jobs = []
     for proc in jobs:
         proc.join()
-    print(time.time() - start)
-
-    print(len(cnts))
-    start = time.time()
-    for x in cnts:
-        for k in x:
-            for y in x[k]:
-                if y not in cnt[k]:
-                    cnt[k][y] = x[k][y]
-                else:
-                    cnt[k][y] += x[k][y]
-    print(time.time() - start)
-    print(cnt.keys())
-    print(cnt["#docs"])
-    print(cnt["#words"])
-    print(sum(cnt["doc lengths"]) / len(cnt["doc lengths"]))
-    # print(Counter(cnt["titles"]))
-    print("done")
-    return cnts
-
-
-def generate_fake_data():
-    import lorem
-    import random
-    os.mkdir("./fake-data")
-    os.mkdir("./fake-data/a")
-    os.mkdir("./fake-data/b")
-    os.mkdir("./fake-data/c")
-
-    template = lambda year, title, content: {
-                "meta":
-                        {
-                            "package_id": "fake123",
-                            "title": title,
-                            "created": year,
-                            "year": year,
-                            "edition": 123,
-                            "issue": "adsf",
-                        },
-                "content":
-                            content
-                }
-    for x in "abc":
-        for i in tqdm(range(1988, 2022)):
-            with open(f"fake-data/{x}/{i}.jsonl", "w") as fout:
-                for _ in range(random.randint(1_000, 2_000)):
-                    print(json.dumps(template(i, lorem.sentence()[0], [lorem.text() for _ in range(10, 100)])), file=fout)
-    return
-
-
-def simple_main(folder_name):
-    cnt = {
-            "#docs": {},
-            "#words": {},
-            "doc lengths": {},
-            "titles": {},
-            }
-    cnts = []
-    start = time.time()
-    for fn in get_files_from_folders(folder_name, ".jsonl"):
-        count_wrapper(fn, cnts)
-    print(time.time() - start)
+    print(f"processing files took {time.time() - start:.2f} seconds")
 
     start = time.time()
     for x in cnts:
@@ -225,24 +147,32 @@ def simple_main(folder_name):
                     cnt[k][y] = x[k][y]
                 else:
                     cnt[k][y] += x[k][y]
-    print(time.time() - start)
-    print(cnt.keys())
-    print(cnt["#docs"])
-    print(cnt["#words"])
-    print(sum(cnt["doc lengths"]) / len(cnt["doc lengths"]))
-    # print(Counter(cnt["titles"]))
+    print(f"collecting counts per file to one large counter took {time.time() - start:.2f} seconds")
+
+    print_counts(cnt)
+
+    with open(outfile, "w") as fout:
+        json.dump(cnt, fout)
+
     print("done")
-    return cnts
+
+
+def get_args() -> argparse.Namespace:
+    print('parsing the arguments ...')
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--n-processes', type=int, default=8,
+                        help="number of processes used for counting files in parallel")
+    parser.add_argument('--folder', type=str, default=None,
+                        help="folder that contains the files that need counting")
+    parser.add_argument('--suffix', type=str, default=None,
+                        help="file-suffix to filter which files need to be counted")
+    parser.add_argument('--output', type=str, default=None,
+                        help="file name to write the report to")
+
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    # generate_fake_data()
-    print("multi")
-    start = time.time()
-    cnt = main("fake-data", 1, 8)
-    print(time.time() - start)
-
-    print("single")
-    start = time.time()
-    cnt = simple_main("fake-data")
-    print(time.time() - start)
+    args = get_args()
+    main(args.folder, args.n_processes, args.suffix, args.output)
