@@ -14,10 +14,11 @@
 import os
 import json
 import multiprocessing as mp
-from typing import List, Dict, Any, Callable, Optional, Iterable
+from typing import List, Dict, Any, Iterable
 from tqdm import tqdm
 import time
 import argparse
+from collections import Counter
 
 
 CNT = Dict[str, Dict[int, Any]]
@@ -49,14 +50,16 @@ def count(jobj: Dict[str, Any], cnt: CNT) -> CNT:
             if year not in cnt["#words"]:
                 cnt["#words"][year] = 0
             if year not in cnt["doc lengths"]:
-                cnt["doc lengths"][year] = []
+                cnt["doc lengths"][year] = Counter()
             if year not in cnt["titles"]:
-                cnt["titles"][year] = []
+                cnt["titles"][year] = Counter()
 
             cnt["#docs"][year] += 1
             cnt["#words"][year] += len_c
-            cnt["doc lengths"][year].append(len_c)
-            cnt["titles"][year].append(title)
+            # cnt["doc lengths"][year].append(len_c)
+            # cnt["titles"][year].append(title)
+            cnt["doc lengths"][year][len_c] += 1
+            cnt["titles"][year][title] += 1
     return cnt
 
 
@@ -67,8 +70,11 @@ def count_updater(cnt: CNT, jobj_cnt: CNT) -> CNT:
                 cnt[key][year] = jobj_cnt[key][year]
                 print(key, year, cnt[key][year])
             else:
-                # either int then add or list and append
-                cnt[key][year] += jobj_cnt[key][year]
+                # either int then add or list and append < comment out comment
+                if key == "#docs" or key == "#words":
+                    cnt[key][year] += jobj_cnt[key][year]
+                else:
+                    cnt[key][year].update(jobj_cnt[key][year])
     return cnt
 
 
@@ -90,7 +96,10 @@ def count_wrapper(fn: str, cnts: List[CNT]) -> List[CNT]:
                     if y not in cnt[k]:
                         cnt[k][y] = jobj_cnt[k][y]
                     else:
-                        cnt[k][y] += jobj_cnt[k][y]
+                        if k == "#words" or k == "#docs":
+                            cnt[k][y] += jobj_cnt[k][y]
+                        else:
+                            cnt[k][y].update(jobj_cnt[k][y])
     cnts.append(cnt)
     return cnts
 
@@ -146,7 +155,10 @@ def main(folder_name: str,
                 if y not in cnt[k]:
                     cnt[k][y] = x[k][y]
                 else:
-                    cnt[k][y] += x[k][y]
+                    if k == "#docs" or k == "#words":
+                        cnt[k][y] += x[k][y]
+                    else:
+                        cnt[k][y].update(x[k][y])
     print(f"collecting counts per file to one large counter took {time.time() - start:.2f} seconds")
 
     print_counts(cnt)
