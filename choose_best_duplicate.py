@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Dict, Iterable, Any
+from typing import Dict, Iterable, Any, Optional
 from tqdm import tqdm
 import difflib
 import time
@@ -103,7 +103,11 @@ def get_dduped_text(fn: str, fn_out: str, dc: Dict[int, Dict[int, float]]) -> No
                         print(content[j], file=trash)
 
 
-def get_dduped_text_json(fn: str, fn_out: str, dc: Dict[str, Dict[str, float]], scores: Dict[str, Dict[str, float]]) -> None:
+def get_dduped_text_json(fn: str,
+                         fn_out: str,
+                         dc: Dict[str, Dict[str, float]],
+                         scores: Optional[Dict[str, Dict[str, float]]]
+                         ) -> None:
     seen = set()
     keep: Dict[str, Dict[int, str]] = {}
 
@@ -124,15 +128,25 @@ def get_dduped_text_json(fn: str, fn_out: str, dc: Dict[str, Dict[str, float]], 
             doc = key2doc[doc_key]
             k, i = split_key(doc_key)
             # init candidate list
-            candidates = [(doc_key, doc, scores[k][i] / len_fun(doc))]
+            if scores:
+                candidates = [(doc_key, doc, scores[k][i] / len_fun(doc))]
+            else:
+                candidates = [(doc_key, doc, -len(doc))]
             seen.add(doc_key)
             # doc has duplicates
             if doc_key in dc:
                 for j in dc[doc_key].keys():
                     if j not in seen:
                         k, i = split_key(j)
-                        candidates.append((j, key2doc[j], scores[k][i] / len_fun(doc)))
+                        if scores:
+                            candidates.append((j, key2doc[j], scores[k][i] / len_fun(doc)))
+                        else:
+                            candidates.append((j, key2doc[j], -len(doc)))
                         seen.add(j)
+            # take the doc with minimal score
+            # kenlm scores are negative log-likelihoods -> smaller better
+            # dividing by the log-length favours longer documents with worse scores
+            # as scores for longer texts are smaller/(or bigger in bizarro-log world)
             doc_key, doc, _ = min(candidates, key=lambda x: x[2])
             k, i = split_key(doc_key)
             if k not in keep:
@@ -157,8 +171,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--input", type=str)
     parser.add_argument("--output", type=str)
     parser.add_argument("--duplicate-candidates", type=str)
-    parser.add_argument("--scores", type=str)
-    parser.add_argument("--num-workers", type=int, default=20)
+    parser.add_argument("--scores", type=str, default=None)
 
     return parser.parse_args()
 
@@ -171,8 +184,11 @@ def main() -> None:
     dc = read_dup_candidates(args.duplicate_candidates)
     edc = mirror_dup_candidates(dc)
 
-    with open(args.scores) as fin:
-        score_dict = json.load(fin)
+    if args.scores:
+        with open(args.scores) as fin:
+            score_dict = json.load(fin)
+    else:
+        score_dict = None
 
     get_dduped_text_json(args.input, args.output, edc, score_dict)
 
