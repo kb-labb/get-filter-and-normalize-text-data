@@ -3,7 +3,7 @@ import json
 import functools
 import data_normalizers as DN
 import data_filters as DF
-from typing import Callable, List, Iterable, Dict, Any, Optional
+from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple
 from tqdm import tqdm
 import multiprocessing as mp
 from functools import partial
@@ -80,7 +80,7 @@ def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
             print(json.dumps({"meta": meta, "content": content}), file=fout)
 
 
-def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[Any, Any]:
+def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict[Any, Any], Dict[str, List[str]]]:
     """
     Given a list of functions and a json-object, this function iterates through
     the object's content and applies all filter functions to filter out unwanted
@@ -90,6 +90,7 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[Any, 
     meta = jobj["meta"]
     content = jobj["content"][:]
     new_content = []
+    filtered = {f.__name__: [] for f in sub_functions}
     for c in content:
         keep = True
         if type(c) == list:  # some docs in SOU are apparently lists
@@ -98,10 +99,11 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[Any, 
         for f in sub_functions:
             if not f(c):
                 keep = False
+                filtered[f.__name__].append(c)
                 break
         if keep:
             new_content.append(c)
-    return {"meta": meta, "content": new_content}
+    return {"meta": meta, "content": new_content}, filtered
 
 
 def apply_filters(fn: str, args: argparse.Namespace) -> None:
@@ -133,14 +135,20 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
 
         data = list(read_jsonl(fn))
 
-        with open(fn + ".filtered", "w") as fout:
+        with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
             # return_dict = multi_func(my_filter, data, args.n_processes, None)
             return_list = multi_pool(my_filter, data, args.n_processes, None, filters)
-            for x in return_list:
+            removed = {}
+            for x, y in return_list:
                 meta = x["meta"]
                 content = x["content"]
-
+                
                 print(json.dumps({"meta": meta, "content": content}), file=fout)
+                for k in y.keys():
+                    if k not in removed:
+                        removed[k] = []
+                    removed[k].extend(y[k])
+            json.dump(removed, fout_err)
 
 
 def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
