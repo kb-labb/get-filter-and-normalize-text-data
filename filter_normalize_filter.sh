@@ -1,13 +1,12 @@
 #! /usr/bin/bash
 
 FILE=$1
-NCPU=40
+NCPU=48
 
 pre_filter="python clean_data.py \
                     --file $FILE \
                     --filter_by_num_tokens \
                     --filter_by_language \
-                    --filter_by_unicode \
                     --filter_tv_tables \
                     --n_processes $NCPU"
 

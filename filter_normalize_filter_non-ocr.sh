@@ -7,7 +7,6 @@ pre_filter="python clean_data.py \
                     --file $FILE \
                     --filter_by_num_tokens \
                     --filter_by_language \
-                    --filter_by_unicode \
                     --n_processes $NCPU"
 
 # normalize takes time due to --common_errors
