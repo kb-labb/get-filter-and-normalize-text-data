@@ -90,7 +90,13 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict
     meta = jobj["meta"]
     content = jobj["content"][:]
     new_content = []
-    filtered = {f.__name__: [] for f in sub_functions}
+    filtered = {}
+    for f in sub_functions:
+        try:
+            name = f.__name__
+        except AttributeError:
+            name = "exact_duplicate"
+        filtered[name] = []
     for c in content:
         keep = True
         if type(c) == list:  # some docs in SOU are apparently lists
@@ -99,7 +105,11 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict
         for f in sub_functions:
             if not f(c):
                 keep = False
-                filtered[f.__name__].append(c)
+                try:
+                    name = f.__name__
+                except AttributeError:
+                    name = "exact_duplicate"
+                filtered[name].append(c)
                 break
         if keep:
             new_content.append(c)

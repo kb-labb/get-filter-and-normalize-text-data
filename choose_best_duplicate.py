@@ -115,7 +115,10 @@ def get_dduped_text_json(fn: str,
         return 10**math.log(len(x.split()))
 
     def split_key(key):
-        k, i = key.split("_")
+        # k, i = key.split("_")
+        k_i = key.split("_")
+        i = k_i[-1]
+        k = "_".join(k_i[:-1])
         i = int(i)
         return k, i
 
