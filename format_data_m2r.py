@@ -53,6 +53,8 @@ def read_file(fn: str) -> Iterable[Tuple[str, str, List[str]]]:
 def tuple_to_dict(mytuple: Tuple[str, str, List[str]]
                   ) -> Dict[str, Union[Meta, List[str]]]:
     uid, url, content = mytuple
+    if url != "failed":
+        uid = f"{uid}_{url}"
     meta: Meta = {"package_id": uid,
                   "title": url,
                   "created": "failed",
