@@ -179,7 +179,7 @@ def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
 
 
 def json2txt(fn: str) -> None:
-    with open(fn.split(".")[0] + ".txt", "w") as fout:
+    with open(fn + ".txt", "w") as fout:
         for jobj in read_jsonl(fn):
             content = jobj["content"]
             for c in content:
@@ -195,6 +195,22 @@ def json2txt(fn: str) -> None:
                                 print(x, file=fout)
                         if not_empty:
                             print("", file=fout)
+
+
+def fuse_paragraphs(fn: str) -> None:
+    with open(fn + ".fused", "w") as fout:
+        for jobj in read_jsonl(fn):
+            content = jobj["content"]
+            # if doc has been split into sentences then this would return the
+            # same format as a doc split into paragraphs, which can be ver
+            # confusing
+            # Please don't split into sentences
+            # returns list with one element that joins the previous list's
+            # elements
+            if content:
+                assert type(content[0]) == str
+                jobj["content"] = [" ".join(content)]
+                print(json.dumps(jobj), file=fout)
 
 
 def get_args() -> argparse.Namespace:
@@ -220,6 +236,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--strip_incomplete_sentence", action="store_true")
 
     parser.add_argument("--json2txt", action="store_true")
+    parser.add_argument("--fuse-paragraphs", action="store_true")
 
     return parser.parse_args()
 
@@ -241,6 +258,8 @@ def main():
             apply_normalizers(args.file, args)
         elif args.json2txt:
             json2txt(args.file)
+        elif args.fuse_paragraphs:
+            fuse_paragraphs(args.file)
 
 
 if __name__ == "__main__":
