@@ -1,4 +1,5 @@
 #! /usr/bin/bash
+set -ex
 
 FILE=$1
 NCPU=40
@@ -87,6 +88,6 @@ eval $deduplicate
 # $cbd_cmd
 
 echo "Json2Text $FILE"
-$json2text
+# $json2text
 
 exit 0

@@ -1,4 +1,5 @@
 #! /usr/bin/bash
+set -ex
 
 FILE=$1
 NCPU=48

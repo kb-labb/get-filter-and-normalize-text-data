@@ -169,7 +169,7 @@ def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
     multiple processes.
     """
     if chunk_size is None:
-        chunk_size = min((len(data) // n_processes, 1))
+        chunk_size = max((len(data) // n_processes, 1))
 
     my_f = partial(my_function, sub_functions=functions)
     with mp.Pool(processes=n_processes) as pool:
