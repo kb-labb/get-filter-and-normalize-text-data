@@ -73,11 +73,12 @@ def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
     data = list(read_jsonl(fn))
     with open(fn + ".normalized", "w") as fout:
         # return_dict = multi_func(my_normalize, data, args.n_processes, 15)
-        return_list = multi_pool(my_normalize, data, args.n_processes, 1, normalizers)
-        for x in return_list:
-            meta = x["meta"]
-            content = x["content"]
-            print(json.dumps({"meta": meta, "content": content}), file=fout)
+        return_list = multi_pool(my_normalize, data, args.n_processes, args.chunksize, normalizers)
+        for xs in return_list:
+            for x in xs:
+                meta = x["meta"]
+                content = x["content"]
+                print(json.dumps({"meta": meta, "content": content}), file=fout)
 
 
 def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict[Any, Any], Dict[str, List[str]]]:
@@ -152,17 +153,26 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
 
         with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
             # return_dict = multi_func(my_filter, data, args.n_processes, None)
-            return_list = multi_pool(my_filter, data, args.n_processes, 5, filters)
+            return_list = multi_pool(my_filter, data, args.n_processes, args.chunksize, filters)
             removed = {}
-            for x, y in return_list:
-                meta = x["meta"]
-                content = x["content"]
+            # for x, y in return_list:
+            for xys in return_list:
+                for xy in xys:
+                    try:
+                        # print("hej",len(xy[0]), xy[0]["content"])
+                        x, y = xy
+                    except ValueError:
+                        print("ho", len(xy))
+                        raise Exception
+                    #print(x)
+                    meta = x["meta"]
+                    content = x["content"]
                 
-                print(json.dumps({"meta": meta, "content": content}), file=fout)
-                for k in y.keys():
-                    if k not in removed:
-                        removed[k] = []
-                    removed[k].extend(y[k])
+                    print(json.dumps({"meta": meta, "content": content}), file=fout)
+                    for k in y.keys():
+                        if k not in removed:
+                            removed[k] = []
+                        removed[k].extend(y[k])
             json.dump(removed, fout_err)
 
 
@@ -178,10 +188,16 @@ def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
         chunk_size = 1 # max((len(data) // n_processes, 1))
 
     my_f = partial(my_function, sub_functions=functions)
+    return_list = []
     with mp.Pool(processes=n_processes) as pool:
-        return_list = pool.imap(my_f, tqdm(data), chunksize=chunk_size)
+        iterator_thing = pool.imap(my_f, tqdm(data), chunksize=chunk_size)
+        for res in iterator_thing:
+            return_list.append(res)
+            if len(return_list) >= chunk_size:
+                yield return_list
+                return_list = []
         # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
-    return return_list
+    # return return_list
 
 
 def json2txt(fn: str) -> None:
@@ -253,6 +269,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--common_errors", action="store_true")
     parser.add_argument("--anonymize", action="store_true")
     parser.add_argument("--n_processes", type=int, default=1)
+    parser.add_argument("--chunksize", type=int, default=1)
     parser.add_argument("--strip_incomplete_string", action="store_true")
 
     parser.add_argument("--sentence_split", action="store_true")
@@ -287,4 +304,7 @@ def main():
 
 
 if __name__ == "__main__":
+    import time
+    start = time.time()
     main()
+    print(time.time() - start)
