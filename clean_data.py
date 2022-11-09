@@ -3,7 +3,7 @@ import json
 import functools
 import data_normalizers as DN
 import data_filters as DF
-from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple
+from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple, ImapIterator
 from tqdm import tqdm
 import multiprocessing as mp
 from functools import partial
@@ -148,7 +148,7 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
         if filters == []:
             return
 
-        data = list(read_jsonl(fn))
+        data = (read_jsonl(fn))
 
         with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
             # return_dict = multi_func(my_filter, data, args.n_processes, None)
@@ -166,9 +166,9 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
             json.dump(removed, fout_err)
 
 
-def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
+def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
                n_processes: int, chunk_size: Optional[int],
-               functions: List[Callable]) -> List[Any]:
+               functions: List[Callable]) -> ImapIterator[Any]: #List[Any]:
     """
     multi_pool is used to apply the normalizers and filters on one file with
     multiple processes.
@@ -178,7 +178,7 @@ def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
 
     my_f = partial(my_function, sub_functions=functions)
     with mp.Pool(processes=n_processes) as pool:
-        return_list = pool.map(my_f, tqdm(data, total=len(data)), chunksize=chunk_size)
+        return_list = pool.imap(my_f, tqdm(data), chunksize=chunk_size)
         # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
     return return_list
 
