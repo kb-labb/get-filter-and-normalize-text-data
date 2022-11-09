@@ -154,17 +154,10 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
         with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
             # return_dict = multi_func(my_filter, data, args.n_processes, None)
             return_list = multi_pool(my_filter, data, args.n_processes, args.chunksize, filters)
-            removed = {}
+            removed: Dict[str, List[str]] = {}
             # for x, y in return_list:
             for xys in return_list:
-                for xy in xys:
-                    try:
-                        # print("hej",len(xy[0]), xy[0]["content"])
-                        x, y = xy
-                    except ValueError:
-                        print("ho", len(xy))
-                        raise Exception
-                    #print(x)
+                for x, y in xys:
                     meta = x["meta"]
                     content = x["content"]
                 
