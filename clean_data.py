@@ -152,7 +152,7 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
 
         with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
             # return_dict = multi_func(my_filter, data, args.n_processes, None)
-            return_list = multi_pool(my_filter, data, args.n_processes, None, filters)
+            return_list = multi_pool(my_filter, data, args.n_processes, 5, filters)
             removed = {}
             for x, y in return_list:
                 meta = x["meta"]
@@ -174,7 +174,8 @@ def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
     multiple processes.
     """
     if chunk_size is None:
-        chunk_size = max((len(data) // n_processes, 1))
+        # chunk_size = max((len(data) // n_processes, 1))
+        chunk_size = 1 # max((len(data) // n_processes, 1))
 
     my_f = partial(my_function, sub_functions=functions)
     with mp.Pool(processes=n_processes) as pool:
