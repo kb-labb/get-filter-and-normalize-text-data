@@ -3,7 +3,7 @@ import json
 import functools
 import data_normalizers as DN
 import data_filters as DF
-from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple, ImapIterator
+from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple
 from tqdm import tqdm
 import multiprocessing as mp
 from functools import partial
@@ -168,7 +168,7 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
 
 def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
                n_processes: int, chunk_size: Optional[int],
-               functions: List[Callable]) -> ImapIterator[Any]: #List[Any]:
+               functions: List[Callable]): #List[Any]:
     """
     multi_pool is used to apply the normalizers and filters on one file with
     multiple processes.
