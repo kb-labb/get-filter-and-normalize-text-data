@@ -263,4 +263,7 @@ def main():
 
 
 if __name__ == "__main__":
+    import time
+    start = time.time()
     main()
+    print(time.time() - start)
