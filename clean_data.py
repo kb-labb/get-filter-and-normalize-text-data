@@ -110,6 +110,11 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict
                 except AttributeError:
                     name = "exact_duplicate"
                 filtered[name].append(c)
+                try:
+                    if new_content[-1] is not None:
+                        new_content.append(None)
+                except IndexError:
+                    pass
                 break
         if keep:
             new_content.append(c)
@@ -183,6 +188,8 @@ def json2txt(fn: str) -> None:
         for jobj in read_jsonl(fn):
             content = jobj["content"]
             for c in content:
+                if c is None:
+                    continue
                 if type(c) == str and c != "":
                     print(c, file=fout)
                 elif type(c) == list:
@@ -197,7 +204,9 @@ def json2txt(fn: str) -> None:
                             print("", file=fout)
 
 
-def fuse_paragraphs(fn: str) -> None:
+def fuse_paragraphs(fn: str, ignore_breaks: bool = False) -> None:
+    # ignore_breaks ignores None elements that appear when one or more
+    # breaks are introduced due to filtering paragraphs
     with open(fn + ".fused", "w") as fout:
         for jobj in read_jsonl(fn):
             content = jobj["content"]
@@ -209,7 +218,20 @@ def fuse_paragraphs(fn: str) -> None:
             # elements
             if content:
                 assert type(content[0]) == str
-                jobj["content"] = [" ".join(content)]
+                if ignore_breaks:
+                    jobj["content"] = [" ".join(content)]
+                else:
+                    new_content = []
+                    last_content: List[str] = []
+                    for c in content:
+                        if c is None:
+                            new_content.append(" ".join(last_content))
+                            last_content = []
+                        else:
+                            last_content.append(c)
+                    if last_content:
+                        new_content.append(" ".join(last_content))
+
                 print(json.dumps(jobj), file=fout)
 
 
@@ -237,6 +259,7 @@ def get_args() -> argparse.Namespace:
 
     parser.add_argument("--json2txt", action="store_true")
     parser.add_argument("--fuse-paragraphs", action="store_true")
+    parser.add_argument("--ignore-breaks", action="store_true")
 
     return parser.parse_args()
 
@@ -259,7 +282,7 @@ def main():
         elif args.json2txt:
             json2txt(args.file)
         elif args.fuse_paragraphs:
-            fuse_paragraphs(args.file)
+            fuse_paragraphs(args.file, args.ignore_breaks)
 
 
 if __name__ == "__main__":
