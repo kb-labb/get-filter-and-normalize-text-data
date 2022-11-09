@@ -73,11 +73,12 @@ def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
     data = list(read_jsonl(fn))
     with open(fn + ".normalized", "w") as fout:
         # return_dict = multi_func(my_normalize, data, args.n_processes, 15)
-        return_list = multi_pool(my_normalize, data, args.n_processes, 1, normalizers)
-        for x in return_list:
-            meta = x["meta"]
-            content = x["content"]
-            print(json.dumps({"meta": meta, "content": content}), file=fout)
+        return_list = multi_pool(my_normalize, data, args.n_processes, args.chunksize, normalizers)
+        for xs in return_list:
+            for x in xs:
+                meta = x["meta"]
+                content = x["content"]
+                print(json.dumps({"meta": meta, "content": content}), file=fout)
 
 
 def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict[Any, Any], Dict[str, List[str]]]:
@@ -110,6 +111,11 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict
                 except AttributeError:
                     name = "exact_duplicate"
                 filtered[name].append(c)
+                try:
+                    if new_content[-1] is not None:
+                        new_content.append(None)
+                except IndexError:
+                    pass
                 break
         if keep:
             new_content.append(c)
@@ -143,39 +149,48 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
         if filters == []:
             return
 
-        data = list(read_jsonl(fn))
+        data = (read_jsonl(fn))
 
         with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
             # return_dict = multi_func(my_filter, data, args.n_processes, None)
-            return_list = multi_pool(my_filter, data, args.n_processes, None, filters)
-            removed = {}
-            for x, y in return_list:
-                meta = x["meta"]
-                content = x["content"]
+            return_list = multi_pool(my_filter, data, args.n_processes, args.chunksize, filters)
+            removed: Dict[str, List[str]] = {}
+            # for x, y in return_list:
+            for xys in return_list:
+                for x, y in xys:
+                    meta = x["meta"]
+                    content = x["content"]
                 
-                print(json.dumps({"meta": meta, "content": content}), file=fout)
-                for k in y.keys():
-                    if k not in removed:
-                        removed[k] = []
-                    removed[k].extend(y[k])
+                    print(json.dumps({"meta": meta, "content": content}), file=fout)
+                    for k in y.keys():
+                        if k not in removed:
+                            removed[k] = []
+                        removed[k].extend(y[k])
             json.dump(removed, fout_err)
 
 
-def multi_pool(my_function: Callable, data: List[Dict[Any, Any]],
+def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
                n_processes: int, chunk_size: Optional[int],
-               functions: List[Callable]) -> List[Any]:
+               functions: List[Callable]): #List[Any]:
     """
     multi_pool is used to apply the normalizers and filters on one file with
     multiple processes.
     """
     if chunk_size is None:
-        chunk_size = max((len(data) // n_processes, 1))
+        # chunk_size = max((len(data) // n_processes, 1))
+        chunk_size = 1 # max((len(data) // n_processes, 1))
 
     my_f = partial(my_function, sub_functions=functions)
+    return_list = []
     with mp.Pool(processes=n_processes) as pool:
-        return_list = pool.map(my_f, tqdm(data, total=len(data)), chunksize=chunk_size)
+        iterator_thing = pool.imap(my_f, tqdm(data), chunksize=chunk_size)
+        for res in iterator_thing:
+            return_list.append(res)
+            if len(return_list) >= chunk_size:
+                yield return_list
+                return_list = []
         # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
-    return return_list
+    # return return_list
 
 
 def json2txt(fn: str) -> None:
@@ -183,6 +198,8 @@ def json2txt(fn: str) -> None:
         for jobj in read_jsonl(fn):
             content = jobj["content"]
             for c in content:
+                if c is None:
+                    continue
                 if type(c) == str and c != "":
                     print(c, file=fout)
                 elif type(c) == list:
@@ -197,7 +214,9 @@ def json2txt(fn: str) -> None:
                             print("", file=fout)
 
 
-def fuse_paragraphs(fn: str) -> None:
+def fuse_paragraphs(fn: str, ignore_breaks: bool = False) -> None:
+    # ignore_breaks ignores None elements that appear when one or more
+    # breaks are introduced due to filtering paragraphs
     with open(fn + ".fused", "w") as fout:
         for jobj in read_jsonl(fn):
             content = jobj["content"]
@@ -209,7 +228,20 @@ def fuse_paragraphs(fn: str) -> None:
             # elements
             if content:
                 assert type(content[0]) == str
-                jobj["content"] = [" ".join(content)]
+                if ignore_breaks:
+                    jobj["content"] = [" ".join(content)]
+                else:
+                    new_content = []
+                    last_content: List[str] = []
+                    for c in content:
+                        if c is None:
+                            new_content.append(" ".join(last_content))
+                            last_content = []
+                        else:
+                            last_content.append(c)
+                    if last_content:
+                        new_content.append(" ".join(last_content))
+
                 print(json.dumps(jobj), file=fout)
 
 
@@ -230,6 +262,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--common_errors", action="store_true")
     parser.add_argument("--anonymize", action="store_true")
     parser.add_argument("--n_processes", type=int, default=1)
+    parser.add_argument("--chunksize", type=int, default=1)
     parser.add_argument("--strip_incomplete_string", action="store_true")
 
     parser.add_argument("--sentence_split", action="store_true")
@@ -237,6 +270,7 @@ def get_args() -> argparse.Namespace:
 
     parser.add_argument("--json2txt", action="store_true")
     parser.add_argument("--fuse-paragraphs", action="store_true")
+    parser.add_argument("--ignore-breaks", action="store_true")
 
     return parser.parse_args()
 
@@ -259,7 +293,7 @@ def main():
         elif args.json2txt:
             json2txt(args.file)
         elif args.fuse_paragraphs:
-            fuse_paragraphs(args.file)
+            fuse_paragraphs(args.file, args.ignore_breaks)
 
 
 if __name__ == "__main__":
