@@ -70,7 +70,7 @@ def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
     if normalizers == []:
         return
 
-    data = list(read_jsonl(fn))
+    data = (read_jsonl(fn))
     with open(fn + ".normalized", "w") as fout:
         # return_dict = multi_func(my_normalize, data, args.n_processes, 15)
         return_list = multi_pool(my_normalize, data, args.n_processes, args.chunksize, normalizers)
