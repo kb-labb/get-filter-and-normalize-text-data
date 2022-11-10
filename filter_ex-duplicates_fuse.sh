@@ -15,7 +15,6 @@ pre_filter="python clean_data.py \
 normalize="python clean_data.py \
                     --file $FILE.filtered
                     --unicode_normalize \
-                    --moses_normalize \
                     --anonymize \
                     --n_processes $NCPU"
 
