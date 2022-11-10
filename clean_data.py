@@ -102,6 +102,9 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict
         filtered[name] = []
     for c in content:
         keep = True
+        if c is None:
+            new_content.append(None)
+            continue
         if type(c) == list:  # some docs in SOU are apparently lists
             c = " ".join(c)
         c = c.replace("\n", " ")  # other docs have newlines which some filter does not like
