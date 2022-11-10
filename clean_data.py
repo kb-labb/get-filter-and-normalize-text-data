@@ -33,6 +33,8 @@ def my_normalize(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Dict[An
     meta = jobj["meta"]
     content = jobj["content"][:]
     for i, c in enumerate(content):
+        if c is None:
+            continue
         # content[i] = normalize(content[i])
         for n in sub_functions:
             content[i] = n(content[i])
