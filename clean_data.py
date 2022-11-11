@@ -234,7 +234,7 @@ def fuse_paragraphs(fn: str, ignore_breaks: bool = False) -> None:
             if content:
                 assert type(content[0]) == str
                 if ignore_breaks:
-                    jobj["content"] = [" ".join(content)]
+                    jobj["content"] = [" ".join(filter(lambda x: x is not None, content))]
                 else:
                     new_content = []
                     last_content: List[str] = []
