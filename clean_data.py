@@ -245,6 +245,7 @@ def fuse_paragraphs(fn: str, ignore_breaks: bool = False) -> None:
                             last_content.append(c)
                     if last_content:
                         new_content.append(" ".join(last_content))
+                    jobj["content"] = new_content
 
                 print(json.dumps(jobj), file=fout)
 
