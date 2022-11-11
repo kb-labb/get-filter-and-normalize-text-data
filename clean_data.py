@@ -238,10 +238,10 @@ def fuse_paragraphs(fn: str, ignore_breaks: bool = False) -> None:
                     new_content = []
                     last_content: List[str] = []
                     for c in content:
-                        if c is None:
+                        if c is None and last_content:
                             new_content.append(" ".join(last_content))
                             last_content = []
-                        else:
+                        elif c is not None:
                             last_content.append(c)
                     if last_content:
                         new_content.append(" ".join(last_content))
