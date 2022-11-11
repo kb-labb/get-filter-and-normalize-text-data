@@ -217,7 +217,8 @@ def compute_fingerprints(args: argparse.Namespace
     for i, input_file in enumerate(args.inputs):
         print(f'document processing {input_file}', flush=True)
 
-        total = len(list(get_keys_and_docs(input_file)))
+        # total = len(list(get_keys_and_docs(input_file)))
+        total = sum(1 for _ in get_keys_and_docs(input_file))
         print(f"File {input_file} has {total:,} documents")
 
         # compute fingerprints in parallel
