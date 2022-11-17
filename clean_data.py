@@ -83,7 +83,10 @@ def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
                 print(json.dumps({"meta": meta, "content": content}), file=fout)
 
 
-def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict[Any, Any], Dict[str, List[str]]]:
+def my_filter(jobj: Dict[Any, Any],
+              sub_functions: List[Callable],
+              remove_breaks: bool = False,
+              ) -> Tuple[Dict[Any, Any], Dict[str, List[str]]]:
     """
     Given a list of functions and a json-object, this function iterates through
     the object's content and applies all filter functions to filter out unwanted
@@ -92,8 +95,8 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict
     """
     meta = jobj["meta"]
     content = jobj["content"][:]
-    new_content = []
-    filtered = {}
+    new_content: List[Optional[str]] = []
+    filtered: Dict[str, List[str]] = {}
     for f in sub_functions:
         try:
             name = f.__name__
@@ -103,7 +106,8 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict
     for c in content:
         keep = True
         if c is None:
-            new_content.append(None)
+            if not remove_breaks:
+                new_content.append(None)
             continue
         if type(c) == list:  # some docs in SOU are apparently lists
             c = " ".join(c)
@@ -118,7 +122,8 @@ def my_filter(jobj: Dict[Any, Any], sub_functions: List[Callable]) -> Tuple[Dict
                 filtered[name].append(c)
                 try:
                     if new_content[-1] is not None:
-                        new_content.append(None)
+                        if not remove_breaks:
+                            new_content.append(None)
                 except IndexError:
                     pass
                 break
@@ -160,7 +165,7 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
                 else:
                     return False
 
-            filters.append(fed)
+            filters.append(fed_up)
 
         if filters == []:
             return
@@ -169,7 +174,8 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
 
         with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
             # return_dict = multi_func(my_filter, data, args.n_processes, None)
-            return_list = multi_pool(my_filter, data, args.n_processes, args.chunksize, filters)
+            my_filter_rfb = partial(my_filter, remove_breaks=args.remove_filter_breaks)
+            return_list = multi_pool(my_filter_rfb, data, args.n_processes, args.chunksize, filters)
             removed: Dict[str, List[str]] = {}
             # for x, y in return_list:
             for xys in return_list:
@@ -260,7 +266,6 @@ def fuse_paragraphs(fn: str, ignore_breaks: bool = False) -> None:
                     if last_content:
                         new_content.append(" ".join(last_content))
                     jobj["content"] = new_content
-
                 print(json.dumps(jobj), file=fout)
 
 
@@ -275,6 +280,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--filter_exact_duplicates", action="store_true")
     parser.add_argument("--filter_tv_tables", action="store_true")
     parser.add_argument("--filter_exact_duplicates_min_size", action="store_true")
+    parser.add_argument("--remove_filter_breaks", action="store_true")
 
     parser.add_argument("--unicode_normalize", action="store_true")
     parser.add_argument("--unidecode_normalize", action="store_true")
