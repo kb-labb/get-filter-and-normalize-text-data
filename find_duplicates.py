@@ -300,7 +300,7 @@ if __name__ == '__main__':
 
     # compute finger prints of the inputs if any
     # input file and the key to use as id
-    if args.inputs is not None:
+    if args.inputs is not None and args.load_fingerprints is None:
         lshcache, url_doc = compute_fingerprints(args)
 
     # Save the fingerprints if needed
