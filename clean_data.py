@@ -150,6 +150,17 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
             hashes: Dict[int, int] = manager.dict()
             fed = partial(DF.filter_exact_duplicates, hashes=hashes)
             filters.append(fed)
+        if args.filter_exact_duplicates_min_size:
+            hashes_fedup: Dict[int, int] = manager.dict()
+            fed = partial(DF.filter_exact_duplicates, hashes=hashes_fedup)
+
+            def fed_up(x):
+                if DF.filter_by_num_tokens(x):
+                    return fed(x)
+                else:
+                    return False
+
+            filters.append(fed)
 
         if filters == []:
             return
@@ -222,6 +233,9 @@ def json2txt(fn: str) -> None:
 def fuse_paragraphs(fn: str, ignore_breaks: bool = False) -> None:
     # ignore_breaks ignores None elements that appear when one or more
     # breaks are introduced due to filtering paragraphs
+
+    # if there are None elements paragraphs are only fused together to a document
+    # between None elements, i.e. continuous paragraphs
     with open(fn + ".fused", "w") as fout:
         for jobj in read_jsonl(fn):
             content = jobj["content"]
@@ -260,6 +274,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--filter_by_unicode", action="store_true")
     parser.add_argument("--filter_exact_duplicates", action="store_true")
     parser.add_argument("--filter_tv_tables", action="store_true")
+    parser.add_argument("--filter_exact_duplicates_min_size", action="store_true")
 
     parser.add_argument("--unicode_normalize", action="store_true")
     parser.add_argument("--unidecode_normalize", action="store_true")
@@ -285,7 +300,7 @@ def main():
     print(args)
     filter_args = [args.filter_by_unicode, args.filter_exact_duplicates,
                    args.filter_by_language, args.filter_by_num_tokens,
-                   args.filter_tv_tables]
+                   args.filter_tv_tables, args.filter_exact_duplicates_min_size]
     normalize_args = [args.unicode_normalize, args.unidecode_normalize,
                       args.moses_normalize, args.anonymize, args.common_errors,
                       args.strip_incomplete_string,
