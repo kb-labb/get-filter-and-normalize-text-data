@@ -170,11 +170,14 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
 
     data = (read_jsonl(fn))
 
-    with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
+    if args.save_removed:
+        fout_err = open(fn + ".removed", "w")
+    with open(fn + ".filtered", "w") as fout:
         # return_dict = multi_func(my_filter, data, args.n_processes, None)
         my_filter_rfb = partial(my_filter, remove_breaks=args.remove_filter_breaks)
         return_list = multi_pool(my_filter_rfb, data, args.n_processes, args.chunksize, filters)
-        removed: Dict[str, List[str]] = {}
+        if args.save_removed:
+            removed: Dict[str, List[str]] = {}
         # for x, y in return_list:
         for xys in return_list:
             for x, y in xys:
@@ -182,11 +185,15 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
                 content = x["content"]
             
                 print(json.dumps({"meta": meta, "content": content}), file=fout)
-                for k in y.keys():
-                    if k not in removed:
-                        removed[k] = []
-                    removed[k].extend(y[k])
-        json.dump(removed, fout_err)
+                if args.save_remove:
+                    for k in y.keys():
+                        if k not in removed:
+                            removed[k] = []
+                        removed[k].extend(y[k])
+        if args.save_removed:
+            json.dump(removed, fout_err)
+    if args.save_removed:
+        fout_err.close()
 
 
 def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
@@ -278,6 +285,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--filter_tv_tables", action="store_true")
     parser.add_argument("--filter_exact_duplicates_min_size", action="store_true")
     parser.add_argument("--remove_filter_breaks", action="store_true")
+    parser.add_argument("--save_removed", action="store_true")
 
     parser.add_argument("--unicode_normalize", action="store_true")
     parser.add_argument("--unidecode_normalize", action="store_true")
