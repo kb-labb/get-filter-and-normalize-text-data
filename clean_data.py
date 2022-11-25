@@ -5,7 +5,6 @@ import data_normalizers as DN
 import data_filters as DF
 from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple
 from tqdm import tqdm
-import multiprocessing as mp
 from functools import partial
 
 
@@ -137,81 +136,79 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
     This function collects filters and applies them to all json-objects in
     the given file.
     """
-    with mp.Manager() as manager:
-        filters: List[Callable] = []
-        if args.filter_by_num_tokens:
-            filters.append(DF.filter_by_num_tokens)
-        if args.filter_by_unicode:
-            filters.append(DF.filter_by_unicode)
-        if args.filter_tv_tables:
-            filters.append(DF.filter_tv_tables)
-        # language filter should be run after normalization
-        # other filters should be run before to have less data when normalizing
-        if args.filter_by_language:
-            filters.append(DF.filter_by_language)
-        if args.filter_exact_duplicates:
-            # hashes: List[int] = [] # manager.list()
-            # hashes: Set[int] = set() # manager.list()
-            hashes: Dict[int, int] = manager.dict()
-            fed = partial(DF.filter_exact_duplicates, hashes=hashes)
-            filters.append(fed)
-        if args.filter_exact_duplicates_min_size:
-            hashes_fedup: Dict[int, int] = manager.dict()
-            fed = partial(DF.filter_exact_duplicates, hashes=hashes_fedup)
+    filters: List[Callable] = []
+    if args.filter_by_num_tokens:
+        filters.append(DF.filter_by_num_tokens)
+    if args.filter_by_unicode:
+        filters.append(DF.filter_by_unicode)
+    if args.filter_tv_tables:
+        filters.append(DF.filter_tv_tables)
+    # language filter should be run after normalization
+    # other filters should be run before to have less data when normalizing
+    if args.filter_by_language:
+        filters.append(DF.filter_by_language)
+    if args.filter_exact_duplicates:
+        # hashes: List[int] = [] # manager.list()
+        # hashes: Set[int] = set() # manager.list()
+        hashes: Dict[int, int] = {}
+        fed = partial(DF.filter_exact_duplicates, hashes=hashes)
+        filters.append(fed)
+    if args.filter_exact_duplicates_min_size:
+        hashes_fedup: Dict[int, int] = {}
+        fed = partial(DF.filter_exact_duplicates, hashes=hashes_fedup)
 
-            def fed_up(x):
-                if DF.filter_by_num_tokens(x):
-                    return fed(x)
-                else:
-                    return False
+        def fed_up(x):
+            if DF.filter_by_num_tokens(x):
+                return fed(x)
+            else:
+                return False
 
-            filters.append(fed_up)
+        filters.append(fed_up)
 
-        if filters == []:
-            return
+    if filters == []:
+        return
 
-        data = (read_jsonl(fn))
+    data = (read_jsonl(fn))
 
-        with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
-            # return_dict = multi_func(my_filter, data, args.n_processes, None)
-            my_filter_rfb = partial(my_filter, remove_breaks=args.remove_filter_breaks)
-            return_list = multi_pool(my_filter_rfb, data, args.n_processes, args.chunksize, filters)
-            removed: Dict[str, List[str]] = {}
-            # for x, y in return_list:
-            for xys in return_list:
-                for x, y in xys:
-                    meta = x["meta"]
-                    content = x["content"]
-                
-                    print(json.dumps({"meta": meta, "content": content}), file=fout)
-                    for k in y.keys():
-                        if k not in removed:
-                            removed[k] = []
-                        removed[k].extend(y[k])
-            json.dump(removed, fout_err)
+    with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
+        # return_dict = multi_func(my_filter, data, args.n_processes, None)
+        my_filter_rfb = partial(my_filter, remove_breaks=args.remove_filter_breaks)
+        return_list = multi_pool(my_filter_rfb, data, args.n_processes, args.chunksize, filters)
+        removed: Dict[str, List[str]] = {}
+        # for x, y in return_list:
+        for xys in return_list:
+            for x, y in xys:
+                meta = x["meta"]
+                content = x["content"]
+            
+                print(json.dumps({"meta": meta, "content": content}), file=fout)
+                for k in y.keys():
+                    if k not in removed:
+                        removed[k] = []
+                    removed[k].extend(y[k])
+        json.dump(removed, fout_err)
 
 
 def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
                n_processes: int, chunk_size: Optional[int],
-               functions: List[Callable]): #List[Any]:
+               functions: List[Callable]):  #List[Any]:
     """
     multi_pool is used to apply the normalizers and filters on one file with
     multiple processes.
     """
     if chunk_size is None:
         # chunk_size = max((len(data) // n_processes, 1))
-        chunk_size = 1 # max((len(data) // n_processes, 1))
+        chunk_size = 1  # max((len(data) // n_processes, 1))
 
     my_f = partial(my_function, sub_functions=functions)
     return_list = []
-    with mp.Pool(processes=n_processes) as pool:
-        iterator_thing = pool.imap(my_f, tqdm(data), chunksize=chunk_size)
-        for res in iterator_thing:
-            return_list.append(res)
-            if len(return_list) >= chunk_size:
-                yield return_list
-                return_list = []
-        # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
+    iterator_thing = map(my_f, tqdm(data))
+    for res in iterator_thing:
+        return_list.append(res)
+        if len(return_list) >= chunk_size:
+            yield return_list
+            return_list = []
+    # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
     # return return_list
 
 
