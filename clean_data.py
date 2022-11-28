@@ -6,6 +6,7 @@ import data_filters as DF
 from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple
 from tqdm import tqdm
 from functools import partial
+import multiprocessing as mp
 
 
 def read_jsonl(fn: str) -> Iterable[Dict[Any, Any]]:
@@ -148,13 +149,21 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
     if args.filter_by_language:
         filters.append(DF.filter_by_language)
     if args.filter_exact_duplicates:
-        # hashes: List[int] = [] # manager.list()
-        # hashes: Set[int] = set() # manager.list()
-        hashes: Dict[int, int] = {}
+        if args.do_parallel:
+            manager = mp.Manager()
+            # hashes: List[int] = [] # manager.list()
+            # hashes: Set[int] = set() # manager.list()
+            hashes: Dict[str, int] = manager.dict()
+        else:
+            hashes: Dict[int, int] = {}
         fed = partial(DF.filter_exact_duplicates, hashes=hashes)
         filters.append(fed)
     if args.filter_exact_duplicates_min_size:
-        hashes_fedup: Dict[int, int] = {}
+        if args.do_parallel:
+            manager = mp.Manager()
+            hashes_fedup: Dict[str, int] = manager.dict()
+        else:
+            hashes_fedup: Dict[str, int] = {}
         fed = partial(DF.filter_exact_duplicates, hashes=hashes_fedup)
 
         def fed_up(x):
@@ -175,7 +184,7 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
     with open(fn + ".filtered", "w") as fout:
         # return_dict = multi_func(my_filter, data, args.n_processes, None)
         my_filter_rfb = partial(my_filter, remove_breaks=args.remove_filter_breaks)
-        return_list = multi_pool(my_filter_rfb, data, args.n_processes, args.chunksize, filters)
+        return_list = multi_pool(my_filter_rfb, data, args.n_processes, args.chunksize, filters, args)
         if args.save_removed:
             removed: Dict[str, List[str]] = {}
         # for x, y in return_list:
@@ -198,7 +207,8 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
 
 def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
                n_processes: int, chunk_size: Optional[int],
-               functions: List[Callable]):  #List[Any]:
+               functions: List[Callable],
+               args: argparse.Namespace):  #List[Any]:
     """
     multi_pool is used to apply the normalizers and filters on one file with
     multiple processes.
@@ -209,7 +219,11 @@ def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
 
     my_f = partial(my_function, sub_functions=functions)
     return_list = []
-    iterator_thing = map(my_f, tqdm(data))
+    if args.do_parallel:
+        pool = mp.Pool(n_processes=n_processes)
+        iterator_thing = pool.imap(my_f, tqdm(data))
+    else:
+        iterator_thing = map(my_f, tqdm(data))
     for res in iterator_thing:
         return_list.append(res)
         if len(return_list) >= chunk_size:
@@ -217,6 +231,7 @@ def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
             return_list = []
     # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
     # return return_list
+    pool.close()
 
 
 def json2txt(fn: str) -> None:
@@ -302,6 +317,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--json2txt", action="store_true")
     parser.add_argument("--fuse-paragraphs", action="store_true")
     parser.add_argument("--ignore-breaks", action="store_true")
+
+    parser.add_argument("--do_parallel", action="store_true")
 
     return parser.parse_args()
 

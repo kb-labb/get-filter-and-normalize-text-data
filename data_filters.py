@@ -39,7 +39,8 @@ def filter_by_unicode(doc: str,
 def filter_exact_duplicates(doc: str, hashes: Dict[int, int]) -> bool:
     # does probably not work properly due to multiprocessing
     # might work thanks to mp.manager.dict
-    h = hash(doc)
+    # h = hash(doc)
+    h = doc
     if h not in hashes:
         hashes[h] = 1
         # hashes.append(h)
