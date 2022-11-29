@@ -155,6 +155,55 @@ def url_pairs_to_remove_bin(bin: Dict[str, str], url_doc: Dict[str, str],
     return remove_urls_list, deduped_local, counter_local
 
 
+def get_docs(bin, fns):
+    start = time.time()
+    print("bin_len", len(bin))
+    url_paragraphs: Dict[str, Set[int]] = {}
+    for value in bin.values():
+        # print(value)
+        if len(value) <= 1:
+            continue
+        for url_i in value:
+            # url, i = url_i.split("_")
+            i = int(url_i.split("_")[-1])
+            url = "_".join(url_i.split("_")[:-1])
+            if url not in url_paragraphs:
+                url_paragraphs[url] = set()
+            url_paragraphs[url].add(i)
+
+    url_doc = {}
+    for fn in fns:
+        for key, doc in get_keys_and_docs(fn):
+            i = int(key.split("_")[-1])
+            url = "_".join(key.split("_")[:-1])
+            try:
+                if i in url_paragraphs[url]:
+                    url_doc[key] = doc
+            except KeyError:
+                pass
+    print(f"getting docs too {time.time() - start:.2f} seconds")
+    return url_doc
+
+
+def url_pairs_to_remove_bin_get_texts(bin: Dict[str, str],
+                                      args: argparse.Namespace
+                                      ) -> Tuple[List[Dict[str, Dict[str, float]]], int, int]:
+    # i = multiprocessing.current_process()._identity[0]
+    url_doc = get_docs(bin, args.inputs)
+    remove_urls_list = []
+    deduped_local, counter_local = 0, 0
+    url_ptr = partial(url_pairs_to_remove, args=args, url_doc=url_doc)
+    # url_remove_iter = map(url_ptr, tqdm(filter(lambda x: len(x) > 1, bin.values()), position=i))
+    url_remove_iter = map(url_ptr, tqdm(filter(lambda x: len(x) > 1, bin.values())))
+    # url_remove_iter = map(url_ptr, tqdm(bin.values(), total=len(bin.values()), position=i))
+    for rud, dedup, count in url_remove_iter:
+        deduped_local += dedup
+        counter_local += count
+        remove_urls_list.append(rud)
+
+    return remove_urls_list, deduped_local, counter_local
+
+
 def find_pair_urls_parallel(args: argparse.Namespace, lshcache: cache.Cache,
                             url_doc: Dict[str, str]) -> None:
     start_time = time.time()
@@ -172,6 +221,22 @@ def find_pair_urls_parallel(args: argparse.Namespace, lshcache: cache.Cache,
         time.time() - start_time), flush=True)
 
 
+# def find_pair_urls_sequential(args: argparse.Namespace, lshcache: cache.Cache,
+#                               url_doc: Dict[str, str]) -> None:
+#     start_time = time.time()
+#     with open(args.output, 'wb') as f_out:
+# 
+#         num_bins = len(lshcache.bins)
+#         print(f"num_bins: {num_bins}")
+#         cj = partial(url_pairs_to_remove_bin, url_doc=url_doc, args=args)
+#         cji = map(cj, lshcache.bins)
+#         for remove_urls, deduped_local, counter_local in cji:
+#             write_remove_urls_dict(remove_urls, f_out)
+# 
+#     print(' Taken time for jaccard similarities {:.2f} seconds'.format(
+#         time.time() - start_time), flush=True)
+
+
 def find_pair_urls_sequential(args: argparse.Namespace, lshcache: cache.Cache,
                               url_doc: Dict[str, str]) -> None:
     start_time = time.time()
@@ -179,7 +244,8 @@ def find_pair_urls_sequential(args: argparse.Namespace, lshcache: cache.Cache,
 
         num_bins = len(lshcache.bins)
         print(f"num_bins: {num_bins}")
-        cj = partial(url_pairs_to_remove_bin, url_doc=url_doc, args=args)
+        # cj = partial(url_pairs_to_remove_bin, args=args)
+        cj = partial(url_pairs_to_remove_bin_get_texts, args=args)
         cji = map(cj, lshcache.bins)
         for remove_urls, deduped_local, counter_local in cji:
             write_remove_urls_dict(remove_urls, f_out)
@@ -211,6 +277,31 @@ def load_fingerprints(args: argparse.Namespace
     return lshcache, url_doc
 
 
+# def compute_fingerprints(args: argparse.Namespace
+#                          ) -> Tuple[cache.Cache, Dict[str, str]]:
+#     print("Computing fingerprints", flush=True)
+#     for i, input_file in enumerate(args.inputs):
+#         print(f'document processing {input_file}', flush=True)
+# 
+#         # total = len(list(get_keys_and_docs(input_file)))
+#         total = sum(1 for _ in get_keys_and_docs(input_file))
+#         print(f"File {input_file} has {total:,} documents")
+# 
+#         # compute fingerprints in parallel
+#         with multiprocessing.get_context("fork").Pool(args.num_workers) as pool:
+#             url_doc = {}
+#             chunksize = max((1, total // args.num_workers))
+#             compute_fingerprint_iter = pool.imap_unordered(compute_fingerprint, get_keys_and_docs(input_file), chunksize=chunksize)
+#             start = time.time()
+#             for url, text, fingerprint, flag in tqdm(compute_fingerprint_iter, total=total):
+#                 if flag:
+#                     url_doc[url] = text
+#                     lshcache.add_fingerprint(fingerprint, url)
+# 
+#             print(f"fingerprinting {input_file} took {time.time() - start:.2f} seconds")
+#     return lshcache, url_doc
+
+
 def compute_fingerprints(args: argparse.Namespace
                          ) -> Tuple[cache.Cache, Dict[str, str]]:
     print("Computing fingerprints", flush=True)
@@ -223,17 +314,19 @@ def compute_fingerprints(args: argparse.Namespace
 
         # compute fingerprints in parallel
         with multiprocessing.get_context("fork").Pool(args.num_workers) as pool:
-            url_doc = {}
             chunksize = max((1, total // args.num_workers))
             compute_fingerprint_iter = pool.imap_unordered(compute_fingerprint, get_keys_and_docs(input_file), chunksize=chunksize)
             start = time.time()
             for url, text, fingerprint, flag in tqdm(compute_fingerprint_iter, total=total):
                 if flag:
-                    url_doc[url] = text
                     lshcache.add_fingerprint(fingerprint, url)
 
             print(f"fingerprinting {input_file} took {time.time() - start:.2f} seconds")
-    return lshcache, url_doc
+        print("Dangerous filter")
+        for i in range(len(lshcache.bins)):
+            lshcache.bins[i] = {k: v for k, v in lshcache.bins[i].items() if len(v) > 1}
+
+    return lshcache, {}
 
 
 def save_fingerprints(args: argparse.Namespace, lshcache: cache.Cache,
