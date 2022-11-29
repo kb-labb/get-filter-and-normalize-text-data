@@ -1,7 +1,7 @@
 import fasttext
 import re
 from filter_by_unicode import NICE_CHARS
-from typing import Pattern, Dict
+from typing import Pattern, Dict, Set
 
 
 MODEL = fasttext.load_model("lid.176.bin")
@@ -36,15 +36,16 @@ def filter_by_unicode(doc: str,
         return True
 
 
-def filter_exact_duplicates(doc: str, hashes: Dict[int, int]) -> bool:
+# def filter_exact_duplicates(doc: str, hashes: Dict[int, int]) -> bool:
+def filter_exact_duplicates(doc: str, hashes: Set[int]) -> bool:
     # does probably not work properly due to multiprocessing
     # might work thanks to mp.manager.dict
-    # h = hash(doc)
-    h = doc
+    h = hash(doc)
+    # h = doc
     if h not in hashes:
-        hashes[h] = 1
+        # hashes[h] = 1
         # hashes.append(h)
-        # hashes.add(h)
+        hashes.add(h)
         return True
     return False
 

@@ -3,7 +3,7 @@ import json
 import functools
 import data_normalizers as DN
 import data_filters as DF
-from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple
+from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple, Set
 from tqdm import tqdm
 from functools import partial
 import multiprocessing as mp
@@ -75,7 +75,7 @@ def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
     data = (read_jsonl(fn))
     with open(fn + ".normalized", "w") as fout:
         # return_dict = multi_func(my_normalize, data, args.n_processes, 15)
-        return_list = multi_pool(my_normalize, data, args.n_processes, args.chunksize, normalizers)
+        return_list = multi_pool(my_normalize, data, args.n_processes, args.chunksize, normalizers, args)
         for xs in return_list:
             for x in xs:
                 meta = x["meta"]
@@ -152,10 +152,11 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
         if args.do_parallel:
             manager = mp.Manager()
             # hashes: List[int] = [] # manager.list()
-            # hashes: Set[int] = set() # manager.list()
-            hashes: Dict[str, int] = manager.dict()
+            # hashes: Set[str] = set() # manager.list()
+            # hashes: Dict[str, int] = manager.dict()
         else:
-            hashes: Dict[int, int] = {}
+            # hashes: Dict[int, int] = {}
+            hashes: Set[int] = set() # manager.list()
         fed = partial(DF.filter_exact_duplicates, hashes=hashes)
         filters.append(fed)
     if args.filter_exact_duplicates_min_size:
@@ -194,7 +195,7 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
                 content = x["content"]
             
                 print(json.dumps({"meta": meta, "content": content}), file=fout)
-                if args.save_remove:
+                if args.save_removed:
                     for k in y.keys():
                         if k not in removed:
                             removed[k] = []
@@ -220,8 +221,8 @@ def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
     my_f = partial(my_function, sub_functions=functions)
     return_list = []
     if args.do_parallel:
-        pool = mp.Pool(n_processes=n_processes)
-        iterator_thing = pool.imap(my_f, tqdm(data))
+        pool = mp.Pool(processes=n_processes)
+        iterator_thing = pool.imap(my_f, tqdm(data), chunksize=chunk_size)
     else:
         iterator_thing = map(my_f, tqdm(data))
     for res in iterator_thing:
@@ -231,7 +232,8 @@ def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
             return_list = []
     # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
     # return return_list
-    pool.close()
+    if args.do_parallel:
+        pool.close()
 
 
 def json2txt(fn: str) -> None:
