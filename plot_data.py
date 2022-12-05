@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import argparse
 
 
-def bar_plot(fn: str,
+def my_plot(fn: str,
              key: str,
              percentages: bool = False,
              weighted: bool = False,
@@ -15,7 +15,7 @@ def bar_plot(fn: str,
     to_plot = {}
     for year in content[key]:
         to_plot.update(content[key][year])
-    
+
     my_bins = [2**i for i in range(1, 13)]
     binned_data = {b: 0 for b in my_bins}
     curr_bin = 0
@@ -66,10 +66,10 @@ def get_args() -> argparse.Namespace:
 
 def main() -> None:
     args = get_args()
-    bar_plot(args.filename, args.key)
-    bar_plot(args.filename, args.key, weighted=True)
-    bar_plot(args.filename, args.key, pie=True)
-    bar_plot(args.filename, args.key, pie=True, weighted=True)
+    my_plot(args.filename, args.key)
+    my_plot(args.filename, args.key, weighted=True)
+    my_plot(args.filename, args.key, pie=True)
+    my_plot(args.filename, args.key, pie=True, weighted=True)
 
     return
 
