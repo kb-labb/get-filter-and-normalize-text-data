@@ -112,7 +112,10 @@ def get_dduped_text_json(fn: str,
     keep: Dict[str, Dict[int, str]] = {}
 
     def len_fun(x):
-        return 10**math.log(len(x.split()))
+        if x:
+            return 10**math.log(len(x.split()))
+        else:
+            return -float("inf")
 
     def split_key(key):
         # k, i = key.split("_")
@@ -129,6 +132,8 @@ def get_dduped_text_json(fn: str,
     for doc_key in tqdm(key2doc, total=total):
         if doc_key not in seen:
             doc = key2doc[doc_key]
+            if doc is None:
+                continue
             k, i = split_key(doc_key)
             # init candidate list
             if scores:

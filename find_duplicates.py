@@ -75,6 +75,8 @@ def compute_fingerprint(key_text: Tuple[str, str]
                         ) -> Tuple[Optional[str], Optional[str], Any, bool]:
     try:
         key, text = key_text
+        if text is None:
+            return None, None, None, False
         fingerprint = hasher.fingerprint(text)
     except Exception as e:
         print('Error:', e)

@@ -2,34 +2,33 @@
 set -ex
 
 FILE=$1
-NCPU=48
+NCPU=40
+CHUNKSIZE=10
+
 
 pre_filter="python clean_data.py \
                     --file $FILE \
-                    --filter_by_num_tokens \
                     --filter_by_language \
+                    --filter_by_num_tokens \
                     --filter_tv_tables \
+                    --chunksize $CHUNKSIZE \
+                    --do_parallel \
                     --n_processes $NCPU"
 
-# normalize takes time due to --common_errors
-# the regex has to take contexts into account and is therefore less efficient
 normalize="python clean_data.py \
                     --file $FILE.filtered
                     --unicode_normalize \
-                    --moses_normalize \
-                    --common_errors \
                     --anonymize \
+                    --common_errors \
                     --strip_incomplete_string \
+                    --chunksize $CHUNKSIZE \
+                    --do_parallel \
                     --n_processes $NCPU"
 
-# post filter finds exact duplicates, which is less efficient due to the processes
-# having to communicate with each other
 post_filter="python clean_data.py \
                     --file $FILE.filtered.normalized \
-                    --filter_by_num_tokens \
-                    --filter_by_language \
-                    --filter_by_unicode \
                     --filter_exact_duplicates \
+                    --chunksize $CHUNKSIZE \
                     --n_processes $NCPU"
 
 # Deduplication section
@@ -54,6 +53,7 @@ fd_cmd="python find_duplicates.py \
     --num-seeds 100 \
     --num-workers $NCPU \
     --jaccard-parallel \
+    --keep_doc_in_mem \
         "
 
 kenlm_cmd="python kenlm_score.py \
@@ -71,7 +71,7 @@ cbd_cmd="python choose_best_duplicate.py \
     --duplicate-candidates $DP_OUT \
         "
 
-deduplicate="$fd_cmd && $kenlm_cmd && $cbd_cmd"
+# deduplicate="$fd_cmd && $kenlm_cmd && $cbd_cmd"
 ###
 
 # sent_split="python clean_data.py \
@@ -96,7 +96,9 @@ echo "Post-Filter $FILE"
 $post_filter
 
 echo "Deduplicate $FILE"
-eval $deduplicate
+$fd_cmd
+$kenlm_cmd
+$cbd_cmd
 
 echo "Json2Text $FILE"
 $json2text
