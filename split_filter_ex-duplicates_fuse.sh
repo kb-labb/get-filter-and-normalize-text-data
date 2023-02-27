@@ -2,13 +2,15 @@
 set -ex
 
 FILE=$1
-NCPU=20
-CHUNKSIZE=100
+NCPU=45
+CHUNKSIZE=500
 
 
-split $1 $1. -d --line-bytes=10GB
+# split $1 $1. -d --line-bytes=10GB
 
-for FILE in $1.*;
+# source /home/robin/environments/robinPyPy/bin/activate
+
+for FILE in $1 # .*;
 do
 
 
@@ -16,6 +18,7 @@ do
                         --file $FILE \
                         --filter_by_language \
                         --chunksize $CHUNKSIZE \
+                        --do_parallel \
                         --n_processes $NCPU"
                         # --filter_by_num_tokens \
                         # no filtering by number of tokens to keep documents
@@ -25,6 +28,7 @@ do
                         --unicode_normalize \
                         --anonymize \
                         --chunksize $CHUNKSIZE \
+                        --do_parallel \
                         --n_processes $NCPU"
 
     # post filter finds exact duplicates, which is less efficient due to the processes
@@ -68,6 +72,8 @@ do
         --heuristic-iter 1 \
         --num-bands 10 \
         --num-seeds 100 \
+        --jaccard-parallel \
+        --keep-doc-in-mem \
         --num-workers $NCPU \
             "
 
@@ -89,20 +95,20 @@ do
 
     # here we run the functions
 
-    echo "Pre-Filter $FILE"
-    $pre_filter
-    
-    echo "Normalize $FILE"
-    $normalize
-    
-    echo "Post-Filter $FILE"
-    $post_filter
-    
-    echo "fuse-paragraphs $FILE"
-    $fuse_paragraphs
+    # echo "Pre-Filter $FILE"
+    # $pre_filter
+    # 
+    # echo "Normalize $FILE"
+    # $normalize
+    # 
+    # echo "Post-Filter $FILE"
+    # $post_filter
+    # 
+    # echo "fuse-paragraphs $FILE"
+    # $fuse_paragraphs
 
-    echo "Post-fuse-Filter $FILE"
-    $post_fuse_filter
+    # echo "Post-fuse-Filter $FILE"
+    # $post_fuse_filter
 
     echo "Deduplicate $FILE"
     eval $deduplicate

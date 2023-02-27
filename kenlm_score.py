@@ -43,6 +43,8 @@ def load_tokenizer(path: str, unk: str, mask: str, pad: str, bos: str, eos: str
 def tok_and_ken(key_text: Tuple[str, str], tokenizer: PreTrainedTokenizerFast,
                 lm: kenlm.Model) -> Tuple[str, float]:
     key, text = key_text
+    if not text:
+        return key, -float("inf")
     tok_list = tokenizer.tokenize(text)
     tok = " ".join(tok_list)
     score = pp(lm.score(tok), len(tok_list))

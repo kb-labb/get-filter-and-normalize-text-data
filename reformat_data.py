@@ -2,6 +2,7 @@ import json
 from typing import Iterable, List, Tuple, TypedDict, Dict, Union
 import argparse
 from tqdm import tqdm
+from clean_data import read_jsonl
 
 
 Meta = TypedDict(
@@ -32,7 +33,7 @@ def read_file_martin(fn: str) -> Iterable[Tuple[str, str, str, List[str]]]:
                     yield (uid, url, time, text)
                     text = []
                 _line = line.strip().split()
-                uid = _line[3]
+                uid = "KB_" + _line[3]
                 if len(_line) > 4:
                     url = _line[4]
                 else:
@@ -49,7 +50,7 @@ def read_file_mc4(fn: str) -> Iterable[Tuple[str, str, str, List[str]]]:
             text = jline["text"].split("\n")
             time = jline["timestamp"]
             url = jline["url"]
-            yield (f"{url}-{time}", url, time, text)
+            yield (f"mc4_{url}-{time}", url, time, text)
 
 
 def read_file_oscar(fn: str) -> Iterable[Tuple[str, str, str, List[str]]]:
@@ -59,8 +60,18 @@ def read_file_oscar(fn: str) -> Iterable[Tuple[str, str, str, List[str]]]:
             text = jline["content"].split("\n")
             time = jline["warc_headers"]["warc-date"]
             url = jline["warc_headers"]["warc-target-uri"]
-            yield (f"{url}-{time}", url, time, text)
+            yield (f"oscar_{url}-{time}", url, time, text)
 
+
+def read_file_wiki(fn: str) -> Iterable[Tuple[str, str, str, List[str]]]:
+    time: str = "failed"
+    with open(fn) as fh:
+        for line in fh:
+            jline = json.loads(line)
+            text = jline["text"].split("\n")
+            title = jline["title"]
+            url = jline["url"]
+            yield (f"wiki_{title}-{url}", url, time, text)
 
 
 {
@@ -95,7 +106,7 @@ def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", default=None, type=str)
     parser.add_argument("--output", default=None, type=str)
-    parser.add_argument("--style", default=None, type=str, choices=["martin", "mc4", "oscar"])
+    parser.add_argument("--style", default=None, type=str, choices=["martin", "mc4", "oscar", "wiki"])
 
     return parser.parse_args()
 
@@ -105,13 +116,15 @@ def main() -> None:
 
     if args.style is None:
         raise Exception("No style given --style")
-    
+
     if args.style == "martin":
         read_file = read_file_martin
     elif args.style == "mc4":
         read_file = read_file_mc4
     elif args.style == "oscar":
         read_file = read_file_oscar
+    elif args.style == "wiki":
+        read_file = read_file_wiki
 
     with open(args.output, "w") as fout:
         for element in tqdm(read_file(args.input)):

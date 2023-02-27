@@ -75,6 +75,8 @@ def compute_fingerprint(key_text: Tuple[str, str]
                         ) -> Tuple[Optional[str], Optional[str], Any, bool]:
     try:
         key, text = key_text
+        if text is None:
+            return None, None, None, False
         fingerprint = hasher.fingerprint(text)
     except Exception as e:
         print('Error:', e)
@@ -155,6 +157,55 @@ def url_pairs_to_remove_bin(bin: Dict[str, str], url_doc: Dict[str, str],
     return remove_urls_list, deduped_local, counter_local
 
 
+def get_docs(bin, fns):
+    start = time.time()
+    print("bin_len", len(bin))
+    url_paragraphs: Dict[str, Set[int]] = {}
+    for value in bin.values():
+        # print(value)
+        if len(value) <= 1:
+            continue
+        for url_i in value:
+            # url, i = url_i.split("_")
+            i = int(url_i.split("_")[-1])
+            url = "_".join(url_i.split("_")[:-1])
+            if url not in url_paragraphs:
+                url_paragraphs[url] = set()
+            url_paragraphs[url].add(i)
+
+    url_doc = {}
+    for fn in fns:
+        for key, doc in get_keys_and_docs(fn):
+            i = int(key.split("_")[-1])
+            url = "_".join(key.split("_")[:-1])
+            try:
+                if i in url_paragraphs[url]:
+                    url_doc[key] = doc
+            except KeyError:
+                pass
+    print(f"getting docs too {time.time() - start:.2f} seconds")
+    return url_doc
+
+
+def url_pairs_to_remove_bin_get_texts(bin: Dict[str, str],
+                                      args: argparse.Namespace
+                                      ) -> Tuple[List[Dict[str, Dict[str, float]]], int, int]:
+    # i = multiprocessing.current_process()._identity[0]
+    url_doc = get_docs(bin, args.inputs)
+    remove_urls_list = []
+    deduped_local, counter_local = 0, 0
+    url_ptr = partial(url_pairs_to_remove, args=args, url_doc=url_doc)
+    # url_remove_iter = map(url_ptr, tqdm(filter(lambda x: len(x) > 1, bin.values()), position=i))
+    url_remove_iter = map(url_ptr, tqdm(filter(lambda x: len(x) > 1, bin.values())))
+    # url_remove_iter = map(url_ptr, tqdm(bin.values(), total=len(bin.values()), position=i))
+    for rud, dedup, count in url_remove_iter:
+        deduped_local += dedup
+        counter_local += count
+        remove_urls_list.append(rud)
+
+    return remove_urls_list, deduped_local, counter_local
+
+
 def find_pair_urls_parallel(args: argparse.Namespace, lshcache: cache.Cache,
                             url_doc: Dict[str, str]) -> None:
     start_time = time.time()
@@ -179,7 +230,10 @@ def find_pair_urls_sequential(args: argparse.Namespace, lshcache: cache.Cache,
 
         num_bins = len(lshcache.bins)
         print(f"num_bins: {num_bins}")
-        cj = partial(url_pairs_to_remove_bin, url_doc=url_doc, args=args)
+        if args.keep_doc_in_mem:
+            cj = partial(url_pairs_to_remove_bin, url_doc=url_doc, args=args)
+        else:
+            cj = partial(url_pairs_to_remove_bin_get_texts, args=args)
         cji = map(cj, lshcache.bins)
         for remove_urls, deduped_local, counter_local in cji:
             write_remove_urls_dict(remove_urls, f_out)
@@ -229,10 +283,16 @@ def compute_fingerprints(args: argparse.Namespace
             start = time.time()
             for url, text, fingerprint, flag in tqdm(compute_fingerprint_iter, total=total):
                 if flag:
-                    url_doc[url] = text
+                    if args.keep_doc_in_mem:
+                        url_doc[url] = text
                     lshcache.add_fingerprint(fingerprint, url)
 
             print(f"fingerprinting {input_file} took {time.time() - start:.2f} seconds")
+
+        print("Filter out everything that has no duplicate candidates")
+        for i in range(len(lshcache.bins)):
+            lshcache.bins[i] = {k: v for k, v in lshcache.bins[i].items() if len(v) > 1}
+
     return lshcache, url_doc
 
 
@@ -277,6 +337,10 @@ def get_args() -> argparse.Namespace:
                         help="Number of workers")
     parser.add_argument('--jaccard-parallel', action='store_true',
                         help='Use this to process large number of documents.')
+
+    parser.add_argument("--keep-doc-in-mem", action="store_true",
+                        help="""Set this flag to load the whole document into
+                        memory for faster processing""")
     return parser.parse_args()
 
 
@@ -311,6 +375,8 @@ if __name__ == '__main__':
     if args.output is not None:
         print("Compute jaccard similarity", flush=True)
         if args.jaccard_parallel:
+            if not args.keep_doc_in_mem:
+                raise Exception("Parallel jaccard computation requires keeping the docs in memory")
             find_pair_urls_parallel(args, lshcache, url_doc)
         else:
             find_pair_urls_sequential(args, lshcache, url_doc)

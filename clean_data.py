@@ -3,10 +3,10 @@ import json
 import functools
 import data_normalizers as DN
 import data_filters as DF
-from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple
+from typing import Callable, List, Iterable, Dict, Any, Optional, Tuple, Set
 from tqdm import tqdm
-import multiprocessing as mp
 from functools import partial
+import multiprocessing as mp
 
 
 def read_jsonl(fn: str) -> Iterable[Dict[Any, Any]]:
@@ -75,7 +75,7 @@ def apply_normalizers(fn: str, args: argparse.Namespace) -> None:
     data = (read_jsonl(fn))
     with open(fn + ".normalized", "w") as fout:
         # return_dict = multi_func(my_normalize, data, args.n_processes, 15)
-        return_list = multi_pool(my_normalize, data, args.n_processes, args.chunksize, normalizers)
+        return_list = multi_pool(my_normalize, data, args.n_processes, args.chunksize, normalizers, args)
         for xs in return_list:
             for x in xs:
                 meta = x["meta"]
@@ -137,82 +137,103 @@ def apply_filters(fn: str, args: argparse.Namespace) -> None:
     This function collects filters and applies them to all json-objects in
     the given file.
     """
-    with mp.Manager() as manager:
-        filters: List[Callable] = []
-        if args.filter_by_num_tokens:
-            filters.append(DF.filter_by_num_tokens)
-        if args.filter_by_unicode:
-            filters.append(DF.filter_by_unicode)
-        if args.filter_tv_tables:
-            filters.append(DF.filter_tv_tables)
-        # language filter should be run after normalization
-        # other filters should be run before to have less data when normalizing
-        if args.filter_by_language:
-            filters.append(DF.filter_by_language)
-        if args.filter_exact_duplicates:
+    filters: List[Callable] = []
+    if args.filter_by_num_tokens:
+        filters.append(DF.filter_by_num_tokens)
+    if args.filter_by_unicode:
+        filters.append(DF.filter_by_unicode)
+    if args.filter_tv_tables:
+        filters.append(DF.filter_tv_tables)
+    # language filter should be run after normalization
+    # other filters should be run before to have less data when normalizing
+    if args.filter_by_language:
+        filters.append(DF.filter_by_language)
+    if args.filter_exact_duplicates:
+        if args.do_parallel:
+            manager = mp.Manager()
             # hashes: List[int] = [] # manager.list()
-            # hashes: Set[int] = set() # manager.list()
-            hashes: Dict[int, int] = manager.dict()
-            fed = partial(DF.filter_exact_duplicates, hashes=hashes)
-            filters.append(fed)
-        if args.filter_exact_duplicates_min_size:
-            hashes_fedup: Dict[int, int] = manager.dict()
-            fed = partial(DF.filter_exact_duplicates, hashes=hashes_fedup)
+            # hashes: Set[str] = set() # manager.list()
+            # hashes: Dict[str, int] = manager.dict()
+        else:
+            # hashes: Dict[int, int] = {}
+            hashes: Set[int] = set() # manager.list()
+        fed = partial(DF.filter_exact_duplicates, hashes=hashes)
+        filters.append(fed)
+    if args.filter_exact_duplicates_min_size:
+        if args.do_parallel:
+            manager = mp.Manager()
+            hashes_fedup: Dict[str, int] = manager.dict()
+        else:
+            hashes_fedup: Dict[str, int] = {}
+        fed = partial(DF.filter_exact_duplicates, hashes=hashes_fedup)
 
-            def fed_up(x):
-                if DF.filter_by_num_tokens(x):
-                    return fed(x)
-                else:
-                    return False
+        def fed_up(x):
+            if DF.filter_by_num_tokens(x):
+                return fed(x)
+            else:
+                return False
 
-            filters.append(fed_up)
+        filters.append(fed_up)
 
-        if filters == []:
-            return
+    if filters == []:
+        return
 
-        data = (read_jsonl(fn))
+    data = (read_jsonl(fn))
 
-        with open(fn + ".filtered", "w") as fout, open(fn + ".removed", "w") as fout_err:
-            # return_dict = multi_func(my_filter, data, args.n_processes, None)
-            my_filter_rfb = partial(my_filter, remove_breaks=args.remove_filter_breaks)
-            return_list = multi_pool(my_filter_rfb, data, args.n_processes, args.chunksize, filters)
+    if args.save_removed:
+        fout_err = open(fn + ".removed", "w")
+    with open(fn + ".filtered", "w") as fout:
+        # return_dict = multi_func(my_filter, data, args.n_processes, None)
+        my_filter_rfb = partial(my_filter, remove_breaks=args.remove_filter_breaks)
+        return_list = multi_pool(my_filter_rfb, data, args.n_processes, args.chunksize, filters, args)
+        if args.save_removed:
             removed: Dict[str, List[str]] = {}
-            # for x, y in return_list:
-            for xys in return_list:
-                for x, y in xys:
-                    meta = x["meta"]
-                    content = x["content"]
-                
-                    print(json.dumps({"meta": meta, "content": content}), file=fout)
+        # for x, y in return_list:
+        for xys in return_list:
+            for x, y in xys:
+                meta = x["meta"]
+                content = x["content"]
+            
+                print(json.dumps({"meta": meta, "content": content}), file=fout)
+                if args.save_removed:
                     for k in y.keys():
                         if k not in removed:
                             removed[k] = []
                         removed[k].extend(y[k])
+        if args.save_removed:
             json.dump(removed, fout_err)
+    if args.save_removed:
+        fout_err.close()
 
 
 def multi_pool(my_function: Callable, data: Iterable[Dict[Any, Any]],
                n_processes: int, chunk_size: Optional[int],
-               functions: List[Callable]): #List[Any]:
+               functions: List[Callable],
+               args: argparse.Namespace):  #List[Any]:
     """
     multi_pool is used to apply the normalizers and filters on one file with
     multiple processes.
     """
     if chunk_size is None:
         # chunk_size = max((len(data) // n_processes, 1))
-        chunk_size = 1 # max((len(data) // n_processes, 1))
+        chunk_size = 1  # max((len(data) // n_processes, 1))
 
     my_f = partial(my_function, sub_functions=functions)
     return_list = []
-    with mp.Pool(processes=n_processes) as pool:
+    if args.do_parallel:
+        pool = mp.Pool(processes=n_processes)
         iterator_thing = pool.imap(my_f, tqdm(data), chunksize=chunk_size)
-        for res in iterator_thing:
-            return_list.append(res)
-            if len(return_list) >= chunk_size:
-                yield return_list
-                return_list = []
-        # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
+    else:
+        iterator_thing = map(my_f, tqdm(data))
+    for res in iterator_thing:
+        return_list.append(res)
+        if len(return_list) >= chunk_size:
+            yield return_list
+            return_list = []
+    # return_dict = list(pool.starmap(my_function, tqdm(itertools.product(data, [functions]), total=len(data)), chunksize=chunk_size))
     # return return_list
+    if args.do_parallel:
+        pool.close()
 
 
 def json2txt(fn: str) -> None:
@@ -281,6 +302,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--filter_tv_tables", action="store_true")
     parser.add_argument("--filter_exact_duplicates_min_size", action="store_true")
     parser.add_argument("--remove_filter_breaks", action="store_true")
+    parser.add_argument("--save_removed", action="store_true")
 
     parser.add_argument("--unicode_normalize", action="store_true")
     parser.add_argument("--unidecode_normalize", action="store_true")
@@ -297,6 +319,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--json2txt", action="store_true")
     parser.add_argument("--fuse-paragraphs", action="store_true")
     parser.add_argument("--ignore-breaks", action="store_true")
+
+    parser.add_argument("--do_parallel", action="store_true")
 
     return parser.parse_args()
 

@@ -147,8 +147,9 @@ def get_ids(archive: kblab.Archive, search_dict: Dict[str, str]) -> List[str]:
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--login_file")
+    parser.add_argument("--login-file")
     parser.add_argument("--tag")
+    parser.add_argument("--meta-genre")
     parser.add_argument("--location", default="data")
 
     return parser.parse_args()
@@ -160,13 +161,23 @@ def main() -> None:
     config = load_config(args.login_file)
     archive = load_archive(config)
 
-    fpath = os.path.join(args.location, args.tag)
+    if args.tag:
+        fpath = os.path.join(args.location, args.tag)
+    if args.meta_genre:
+        fpath = os.path.join(args.location, args.meta_genre)
     os.makedirs(fpath, exist_ok=True)
 
     # package_ids = [x for x in archive.search({"tags": args.tag})]
     package_ids = []
     counter = 0
-    my_search = archive.search({"tags": args.tag})
+    # my_search = archive.search({"tags": args.tag})
+    search_dict = {}
+    if args.tag:
+        search_dict["tags"] = args.tag
+    if args.meta_genre:
+        search_dict["meta.genre"] = args.meta_genre
+    my_search = archive.search(search_dict)
+
     total = my_search.n
     while True:
         try:

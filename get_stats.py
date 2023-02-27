@@ -41,6 +41,8 @@ def count(jobj: Dict[str, Any], cnt: CNT) -> CNT:
     content = jobj["content"]
 
     for c in content:
+        if c is None:
+            continue
         if type(c) == list:  # if it is sentence-split just ignore that for now
             c = " ".join(c)
         len_c = len(c.split())
