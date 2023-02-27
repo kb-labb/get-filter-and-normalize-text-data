@@ -63,6 +63,16 @@ def read_file_oscar(fn: str) -> Iterable[Tuple[str, str, str, List[str]]]:
             yield (f"oscar_{url}-{time}", url, time, text)
 
 
+def read_file_wiki(fn: str) -> Iterable[Tuple[str, str, str, List[str]]]:
+    time: str = "failed"
+    with open(fn) as fh:
+        for line in fh:
+            jline = json.loads(line)
+            text = jline["text"].split("\n")
+            title = jline["title"]
+            url = jline["url"]
+            yield (f"wiki_{title}-{url}", url, time, text)
+
 
 {
     "package_id": "failed",
@@ -96,7 +106,7 @@ def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", default=None, type=str)
     parser.add_argument("--output", default=None, type=str)
-    parser.add_argument("--style", default=None, type=str, choices=["martin", "mc4", "oscar"])
+    parser.add_argument("--style", default=None, type=str, choices=["martin", "mc4", "oscar", "wiki"])
 
     return parser.parse_args()
 
@@ -113,6 +123,8 @@ def main() -> None:
         read_file = read_file_mc4
     elif args.style == "oscar":
         read_file = read_file_oscar
+    elif args.style == "wiki":
+        read_file = read_file_wiki
 
     with open(args.output, "w") as fout:
         for element in tqdm(read_file(args.input)):

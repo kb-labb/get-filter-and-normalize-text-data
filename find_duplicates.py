@@ -336,7 +336,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--jaccard-parallel', action='store_true',
                         help='Use this to process large number of documents.')
 
-    parser.add_argument("--keep_doc_in_mem", action="store_true",
+    parser.add_argument("--keep-doc-in-mem", action="store_true",
                         help="""Set this flag to load the whole document into
                         memory for faster processing""")
     return parser.parse_args()
