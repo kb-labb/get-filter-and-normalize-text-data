@@ -72,6 +72,8 @@ do
         --heuristic-iter 1 \
         --num-bands 10 \
         --num-seeds 100 \
+        --jaccard-parallel \
+        --keep-doc-in-mem \
         --num-workers $NCPU \
             "
 
@@ -98,21 +100,21 @@ do
     # 
     # echo "Normalize $FILE"
     # $normalize
-    
+    # 
     # echo "Post-Filter $FILE"
     # $post_filter
-    
-    echo "fuse-paragraphs $FILE"
-    $fuse_paragraphs
+    # 
+    # echo "fuse-paragraphs $FILE"
+    # $fuse_paragraphs
 
-    echo "Post-fuse-Filter $FILE"
-    $post_fuse_filter
+    # echo "Post-fuse-Filter $FILE"
+    # $post_fuse_filter
 
-    # echo "Deduplicate $FILE"
-    # eval $deduplicate
+    echo "Deduplicate $FILE"
+    eval $deduplicate
 
-    # echo "Json2Text $FILE"
-    # $json2text
+    echo "Json2Text $FILE"
+    $json2text
 done
 
 exit 0
